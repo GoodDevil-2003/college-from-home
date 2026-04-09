@@ -9,10 +9,11 @@ app.secret_key = 'collegefromhome_secret_key'
 # ─── DATABASE CONFIG ───────────────────────────────────
 import os
 
-app.config['MYSQL_HOST'] = os.environ.get('MYSQL_HOST', 'localhost')
-app.config['MYSQL_USER'] = os.environ.get('MYSQL_USER', 'root')
-app.config['MYSQL_PASSWORD'] = os.environ.get('MYSQL_PASSWORD', '')
-app.config['MYSQL_DB'] = os.environ.get('MYSQL_DB', 'collage_from_home')
+app.config['MYSQL_HOST'] = os.environ.get('MYSQLHOST', 'localhost')
+app.config['MYSQL_USER'] = os.environ.get('MYSQLUSER', 'root')
+app.config['MYSQL_PASSWORD'] = os.environ.get('MYSQLPASSWORD', '')
+app.config['MYSQL_DB'] = os.environ.get('MYSQLDATABASE', 'collage_from_home')
+app.config['MYSQL_PORT'] = int(os.environ.get('MYSQLPORT', 3306))
 
 mysql = MySQL(app)
 
