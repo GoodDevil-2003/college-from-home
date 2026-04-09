@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>College From Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="landing-body">
+
+    <!-- NAVBAR -->
+    <nav class="landing-nav">
+        <div class="nav-brand">🎓 College From Home</div>
+        <a href="/login" class="btn-nav">Login</a>
+    </nav>
+
+    <!-- HERO SECTION -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1>Welcome to<br><span>College From Home</span></h1>
+            <p>Your complete online college portal — attend classes, access study materials, submit assignments and stay updated, all from home!</p>
+            <div class="hero-btns">
+                <a href="/login" class="btn-hero-primary">🔐 Login</a>
+                <a href="/register" class="btn-hero-secondary">📝 Register</a>
+            </div>
+        </div>
+        <div class="hero-image">🎓</div>
+    </section>
+
+    <!-- FEATURES -->
+    <section class="features">
+        <h2>What You Can Do</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">👑</div>
+                <h3>Super Admin</h3>
+                <p>Manage all users, assign subjects to teachers, post college announcements and control the entire portal.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">👨‍🏫</div>
+                <h3>Teachers</h3>
+                <p>Upload notes, assignments and question papers for your assigned subjects. Review student submissions and add remarks.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🎒</div>
+                <h3>Students</h3>
+                <p>Enroll in subjects, download study materials, submit solved papers and stay updated with college announcements.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="landing-footer">
+        <p>© 2025 College From Home. Built with ❤️ for MCA Project.</p>
+    </footer>
+
+</body>
+</html>

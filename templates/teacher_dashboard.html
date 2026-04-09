@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher Dashboard - College From Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="dash-body">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+    <div class="sidebar-logo">🎓 CFH</div>
+    <nav>
+        <a href="#overview" class="nav-link active">📊 Overview</a>
+        <a href="#subjects" class="nav-link">📚 My Subjects</a>
+        <a href="#upload" class="nav-link">📤 Upload Material</a>
+        <a href="#materials" class="nav-link">📁 My Materials</a>
+        <a href="#submissions" class="nav-link">📋 Submissions</a>
+    </nav>
+    <a href="/logout" class="logout-btn">🚪 Logout</a>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main-content">
+
+    <!-- HEADER -->
+    <div class="dash-header">
+        <h1>📚 Teacher Dashboard</h1>
+        <span class="admin-badge">{{ name }}</span>
+    </div>
+
+    <!-- FLASH MESSAGES -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- STATS -->
+    <div id="overview" class="stats-grid">
+        <div class="stat-card blue">
+            <div class="stat-icon">📚</div>
+            <div class="stat-info">
+                <h3>{{ assigned_subjects|length }}</h3>
+                <p>Assigned Subjects</p>
+            </div>
+        </div>
+        <div class="stat-card green">
+            <div class="stat-icon">📁</div>
+            <div class="stat-info">
+                <h3>{{ total_materials }}</h3>
+                <p>Materials Uploaded</p>
+            </div>
+        </div>
+        <div class="stat-card orange">
+            <div class="stat-icon">📋</div>
+            <div class="stat-info">
+                <h3>{{ total_submissions }}</h3>
+                <p>Student Submissions</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- MY SUBJECTS -->
+    <div id="subjects" class="section-card">
+        <h2>📚 My Assigned Subjects</h2>
+        <div class="subjects-grid">
+            {% for sub in assigned_subjects %}
+            <div class="subject-card">
+                <div class="subject-icon">📖</div>
+                <h3>{{ sub[1] }}</h3>
+                <p>Class: {{ sub[2] }}</p>
+            </div>
+            {% else %}
+            <p style="color:#888;">No subjects assigned yet. Contact admin.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- UPLOAD MATERIAL -->
+    <div id="upload" class="section-card">
+        <h2>📤 Upload Material</h2>
+        {% if assigned_subjects %}
+        <form method="POST" action="/teacher/upload" enctype="multipart/form-data" class="upload-form">
+            <div class="form-row">
+                <div class="form-group-dash">
+                    <label>Title</label>
+                    <input type="text" name="title" placeholder="e.g. Chapter 1 Notes" required>
+                </div>
+                <div class="form-group-dash">
+                    <label>Subject</label>
+                    <select name="subject_id" required>
+                        <option value="">-- Select Subject --</option>
+                        {% for sub in assigned_subjects %}
+                        <option value="{{ sub[0] }}">{{ sub[1] }} - {{ sub[2] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group-dash">
+                    <label>Material Type</label>
+                    <select name="material_type" required>
+                        <option value="">-- Select Type --</option>
+                        <option value="notes">📝 Notes</option>
+                        <option value="assignment">📌 Assignment</option>
+                        <option value="question_paper">📄 Question Paper</option>
+                        <option value="update">📢 Update</option>
+                    </select>
+                </div>
+                <div class="form-group-dash">
+                    <label>Upload File</label>
+                    <input type="file" name="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.mp4">
+                </div>
+            </div>
+            <div class="form-group-dash">
+                <label>Description</label>
+                <textarea name="description" placeholder="Write a short description..."></textarea>
+            </div>
+            <button type="submit" class="btn-primary-sm">📤 Upload Material</button>
+        </form>
+        {% else %}
+        <p style="color:#888;">You need to be assigned a subject before uploading materials.</p>
+        {% endif %}
+    </div>
+
+    <!-- MY MATERIALS -->
+    <div id="materials" class="section-card">
+        <h2>📁 My Uploaded Materials</h2>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Subject</th>
+                        <th>Type</th>
+                        <th>Date</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for mat in my_materials %}
+                <tr>
+                    <td>{{ mat[1] }}</td>
+                    <td>{{ mat[4] }}</td>
+                    <td>
+                        {% if mat[2] == 'notes' %}<span class="badge green">📝 Notes</span>
+                        {% elif mat[2] == 'assignment' %}<span class="badge orange">📌 Assignment</span>
+                        {% elif mat[2] == 'question_paper' %}<span class="badge blue">📄 Question Paper</span>
+                        {% else %}<span class="badge purple">📢 Update</span>{% endif %}
+                    </td>
+                    <td>{{ mat[3].strftime('%d %b %Y') }}</td>
+                    <td>
+                        
+                    <a href="/teacher/delete_material/{{ mat[0] }}" class="btn-sm red">🗑️ Delete</a>
+                {% else %}
+                <tr><td colspan="5" style="text-align:center;">No materials uploaded yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- STUDENT SUBMISSIONS -->
+    <div id="submissions" class="section-card">
+        <h2>📋 Student Submissions</h2>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Assignment</th>
+                        <th>Submitted</th>
+                        <th>File</th>
+                        <th>Remark</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for sub in submissions %}
+                <tr>
+                    <td>{{ sub[1] }}</td>
+                    <td>{{ sub[2] }}</td>
+                    <td>{{ sub[3].strftime('%d %b %Y') }}</td>
+                    <td>
+                        <a href="/static/uploads/{{ sub[4] }}" target="_blank" class="btn-sm blue">📥 View</a>
+                    </td>
+                    <td>
+                        {% if sub[5] %}
+                            <span class="badge green">{{ sub[5] }}</span>
+                        {% else %}
+                        <form method="POST" action="/teacher/remark/{{ sub[6] }}" style="display:flex; gap:5px;">
+                            <input type="text" name="remark" placeholder="Add remark..." style="padding:4px 8px; border:1px solid #ddd; border-radius:6px; font-size:12px; width:120px;">
+                            <button type="submit" class="btn-primary-sm" style="padding:4px 10px; font-size:12px;">✅</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" style="text-align:center;">No submissions yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+</body>
+</html>

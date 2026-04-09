@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Dashboard - College From Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="dash-body">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+    <div class="sidebar-logo">🎓 CFH</div>
+    <nav>
+        <a href="#announcements" class="nav-link active">📢 Announcements</a>
+        <a href="#subjects" class="nav-link">📚 My Subjects</a>
+        <a href="#materials" class="nav-link">📁 Study Material</a>
+        <a href="#submissions" class="nav-link">📋 My Submissions</a>
+        <a href="#browse" class="nav-link">🔍 Browse Subjects</a>
+    </nav>
+    <a href="/logout" class="logout-btn">🚪 Logout</a>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main-content">
+
+    <!-- HEADER -->
+    <div class="dash-header">
+        <h1>🎒 Student Dashboard</h1>
+        <span class="admin-badge">{{ name }}</span>
+    </div>
+
+    <!-- FLASH MESSAGES -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- STATS -->
+    <div class="stats-grid">
+        <div class="stat-card blue">
+            <div class="stat-icon">📚</div>
+            <div class="stat-info">
+                <h3>{{ enrolled_subjects|length }}</h3>
+                <p>Enrolled Subjects</p>
+            </div>
+        </div>
+        <div class="stat-card green">
+            <div class="stat-icon">📁</div>
+            <div class="stat-info">
+                <h3>{{ materials|length }}</h3>
+                <p>Available Materials</p>
+            </div>
+        </div>
+        <div class="stat-card orange">
+            <div class="stat-icon">📋</div>
+            <div class="stat-info">
+                <h3>{{ my_submissions|length }}</h3>
+                <p>My Submissions</p>
+            </div>
+        </div>
+        <div class="stat-card purple">
+            <div class="stat-icon">📢</div>
+            <div class="stat-info">
+                <h3>{{ announcements|length }}</h3>
+                <p>Announcements</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ANNOUNCEMENTS -->
+    <div id="announcements" class="section-card">
+        <h2>📢 College Announcements</h2>
+        {% if announcements %}
+        <div class="announce-grid">
+            {% for ann in announcements %}
+            <div class="announce-card
+                {% if ann[3] == 'fees' %}ann-fees
+                {% elif ann[3] == 'exam' %}ann-exam
+                {% elif ann[3] == 'event' %}ann-event
+                {% else %}ann-general{% endif %}">
+                <div class="ann-header">
+                    <span class="ann-icon">
+                        {% if ann[3] == 'fees' %}💰
+                        {% elif ann[3] == 'exam' %}📝
+                        {% elif ann[3] == 'event' %}🎉
+                        {% else %}📌{% endif %}
+                    </span>
+                    <span class="badge
+                        {% if ann[3] == 'fees' %}orange
+                        {% elif ann[3] == 'exam' %}red
+                        {% elif ann[3] == 'event' %}green
+                        {% else %}purple{% endif %}">
+                        {{ ann[3]|upper }}
+                    </span>
+                </div>
+                <h3>{{ ann[1] }}</h3>
+                <p>{{ ann[2] }}</p>
+                <small>📅 {{ ann[4].strftime('%d %b %Y') }}</small>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p style="color:#888;">No announcements yet.</p>
+        {% endif %}
+    </div>
+
+    <!-- MY ENROLLED SUBJECTS -->
+    <div id="subjects" class="section-card">
+        <h2>📚 My Enrolled Subjects</h2>
+        {% if enrolled_subjects %}
+        <div class="subjects-grid">
+            {% for sub in enrolled_subjects %}
+            <div class="subject-card">
+                <div class="subject-icon">📖</div>
+                <h3>{{ sub[1] }}</h3>
+                <p>Class: {{ sub[2] }}</p>
+                <a href="/student/unenroll/{{ sub[0] }}"
+                   class="unenroll-btn">✖ Unenroll</a>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p style="color:#888;">You are not enrolled in any subject yet. Browse subjects below!</p>
+        {% endif %}
+    </div>
+
+    <!-- STUDY MATERIALS -->
+    <div id="materials" class="section-card">
+        <h2>📁 Study Materials</h2>
+        {% if materials %}
+        <div class="materials-grid">
+            {% for mat in materials %}
+            <div class="material-card">
+                <div class="mat-type-icon">
+                    {% if mat[3] == 'notes' %}📝
+                    {% elif mat[3] == 'assignment' %}📌
+                    {% elif mat[3] == 'question_paper' %}📄
+                    {% else %}📢{% endif %}
+                </div>
+                <div class="mat-info">
+                    <h4>{{ mat[1] }}</h4>
+                    <p>{{ mat[2] }}</p>
+                    <small>📚 {{ mat[6] }} &nbsp;|&nbsp; 👨‍🏫 {{ mat[7] }}</small>
+                    <small>📅 {{ mat[5].strftime('%d %b %Y') }}</small>
+                </div>
+                <div class="mat-actions">
+                    {% if mat[4] %}
+                    <a href="/static/uploads/{{ mat[4] }}" target="_blank" class="btn-sm blue">📥 Download</a>
+                    {% endif %}
+                    {% if mat[3] == 'question_paper' or mat[3] == 'assignment' %}
+                    <form method="POST" action="/student/submit/{{ mat[0] }}" enctype="multipart/form-data" style="display:flex; gap:5px; margin-top:6px;">
+                        <input type="file" name="file" required style="font-size:11px; width:140px;">
+                        <button type="submit" class="btn-primary-sm" style="padding:4px 10px; font-size:12px;">📤 Submit</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p style="color:#888;">No materials available. Enroll in subjects to see materials.</p>
+        {% endif %}
+    </div>
+
+    <!-- MY SUBMISSIONS -->
+    <div id="submissions" class="section-card">
+        <h2>📋 My Submissions</h2>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Assignment</th>
+                        <th>Submitted On</th>
+                        <th>File</th>
+                        <th>Teacher Remark</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for sub in my_submissions %}
+                <tr>
+                    <td>{{ sub[1] }}</td>
+                    <td>{{ sub[2].strftime('%d %b %Y') }}</td>
+                    <td><a href="/static/uploads/{{ sub[4] }}" target="_blank" class="btn-sm blue">📥 View</a></td>
+                    <td>
+                        {% if sub[3] %}
+                        <span class="badge green">{{ sub[3] }}</span>
+                        {% else %}
+                        <span class="badge orange">Pending Review</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="text-align:center;">No submissions yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- BROWSE & ENROLL SUBJECTS -->
+    <div id="browse" class="section-card">
+        <h2>🔍 Browse & Enroll in Subjects</h2>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Subject</th>
+                        <th>Class</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for sub in all_subjects %}
+                <tr>
+                    <td>{{ sub[1] }}</td>
+                    <td>{{ sub[2] }}</td>
+                    <td>
+                        {% if sub[0] in enrolled_ids %}
+                        <span class="badge green">✅ Enrolled</span>
+                        {% else %}
+                        <a href="/student/enroll/{{ sub[0] }}" class="btn-sm green">➕ Enroll</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" style="text-align:center;">No subjects available yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+</body>
+</html>

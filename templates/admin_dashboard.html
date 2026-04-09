@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - College From Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="dash-body">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+    <div class="sidebar-logo">🎓 CFH</div>
+    <nav>
+        <a href="#stats" class="nav-link active">📊 Overview</a>
+        <a href="#users" class="nav-link">👥 Manage Users</a>
+        <a href="#subjects" class="nav-link">📚 Subjects</a>
+        <a href="#assign" class="nav-link">🔗 Assign Teachers</a>
+        <a href="#announcements" class="nav-link">📢 Announcements</a>
+    </nav>
+    <a href="/logout" class="logout-btn">🚪 Logout</a>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main-content">
+
+    <!-- HEADER -->
+    <div class="dash-header">
+        <h1>👑 Super Admin Dashboard</h1>
+        <span class="admin-badge">{{ name }}</span>
+    </div>
+
+    <!-- FLASH MESSAGES -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- STATS CARDS -->
+    <div id="stats" class="stats-grid">
+        <div class="stat-card blue">
+            <div class="stat-icon">👨‍🏫</div>
+            <div class="stat-info">
+                <h3>{{ total_teachers }}</h3>
+                <p>Total Teachers</p>
+            </div>
+        </div>
+        <div class="stat-card green">
+            <div class="stat-icon">🎒</div>
+            <div class="stat-info">
+                <h3>{{ total_students }}</h3>
+                <p>Total Students</p>
+            </div>
+        </div>
+        <div class="stat-card orange">
+            <div class="stat-icon">⏳</div>
+            <div class="stat-info">
+                <h3>{{ pending_approvals }}</h3>
+                <p>Pending Approvals</p>
+            </div>
+        </div>
+        <div class="stat-card purple">
+            <div class="stat-icon">📢</div>
+            <div class="stat-info">
+                <h3>{{ total_announcements }}</h3>
+                <p>Announcements</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- MANAGE USERS -->
+    <div id="users" class="section-card">
+        <h2>👥 Manage Users</h2>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for user in all_users %}
+                <tr>
+                    <td>{{ user[0] }}</td>
+                    <td>{{ user[1] }}</td>
+                    <td>{{ user[2] }}</td>
+                    <td>
+                        <form method="POST" action="/admin/change_role/{{ user[0] }}" style="display:inline;">
+                            <select name="new_role" onchange="this.form.submit()" class="role-select">
+                                <option value="teacher" {% if user[4] == 'teacher' %}selected{% endif %}>Teacher</option>
+                                <option value="student" {% if user[4] == 'student' %}selected{% endif %}>Student</option>
+                            </select>
+                        </form>
+                    </td>
+                    <td>
+                        {% if user[6] == 1 %}
+                            <span class="badge red">Blocked</span>
+                        {% elif user[5] == 0 %}
+                            <span class="badge orange">Pending</span>
+                        {% else %}
+                            <span class="badge green">Active</span>
+                        {% endif %}
+                    </td>
+                    <td class="action-btns">
+                        {% if user[5] == 0 %}
+                            <a href="/admin/approve/{{ user[0] }}" class="btn-sm green">✅ Approve</a>
+                        {% endif %}
+                        <a href="/admin/block/{{ user[0] }}" class="btn-sm {% if user[6] == 1 %}blue{% else %}red{% endif %}">
+                            {% if user[6] == 1 %}🔓 Unblock{% else %}🚫 Block{% endif %}
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" style="text-align:center;">No users registered yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- SUBJECTS -->
+    <div id="subjects" class="section-card">
+        <h2>📚 Manage Subjects</h2>
+        <form method="POST" action="/admin/add_subject" class="inline-form">
+            <input type="text" name="subject_name" placeholder="Subject Name" required>
+            <input type="text" name="class_name" placeholder="Class (e.g. FY, SY, TY)" required>
+            <button type="submit" class="btn-primary-sm">➕ Add Subject</button>
+        </form>
+        <div class="table-wrapper" style="margin-top:15px;">
+            <table class="data-table">
+                <thead>
+                    <tr><th>#</th><th>Subject</th><th>Class</th></tr>
+                </thead>
+                <tbody>
+                {% for sub in subjects %}
+                <tr>
+                    <td>{{ sub[0] }}</td>
+                    <td>{{ sub[1] }}</td>
+                    <td>{{ sub[2] }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" style="text-align:center;">No subjects added yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ASSIGN TEACHERS -->
+    <div id="assign" class="section-card">
+        <h2>🔗 Assign Subjects to Teachers</h2>
+        <form method="POST" action="/admin/assign_subject" class="inline-form">
+            <select name="teacher_id" required>
+                <option value="">-- Select Teacher --</option>
+                {% for teacher in teachers %}
+                <option value="{{ teacher[0] }}">{{ teacher[1] }} ({{ teacher[2] }})</option>
+                {% endfor %}
+            </select>
+            <select name="subject_id" required>
+                <option value="">-- Select Subject --</option>
+                {% for sub in subjects %}
+                <option value="{{ sub[0] }}">{{ sub[1] }} - {{ sub[2] }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn-primary-sm">🔗 Assign</button>
+        </form>
+        <div class="table-wrapper" style="margin-top:15px;">
+            <table class="data-table">
+                <thead>
+                    <tr><th>#</th><th>Teacher</th><th>Subject</th><th>Class</th><th>Action</th></tr>
+                </thead>
+                <tbody>
+                {% for a in assignments %}
+                <tr>
+                    <td>{{ a[0] }}</td>
+                    <td>{{ a[1] }}</td>
+                    <td>{{ a[2] }}</td>
+                    <td>{{ a[3] }}</td>
+                    <td><a href="/admin/remove_assignment/{{ a[0] }}" class="btn-sm red">🗑️ Remove</a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" style="text-align:center;">No assignments yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ANNOUNCEMENTS -->
+    <div id="announcements" class="section-card">
+        <h2>📢 Post Announcement</h2>
+        <form method="POST" action="/admin/announcement" class="announce-form">
+            <input type="text" name="title" placeholder="Announcement Title" required>
+            <select name="category" required>
+                <option value="">-- Category --</option>
+                <option value="fees">💰 Fees</option>
+                <option value="exam">📝 Exam</option>
+                <option value="event">🎉 Event</option>
+                <option value="general">📌 General</option>
+            </select>
+            <textarea name="content" placeholder="Write announcement here..." required></textarea>
+            <button type="submit" class="btn-primary-sm">📢 Post</button>
+        </form>
+        <div class="table-wrapper" style="margin-top:20px;">
+            <table class="data-table">
+                <thead>
+                    <tr><th>Title</th><th>Category</th><th>Date</th><th>Action</th></tr>
+                </thead>
+                <tbody>
+                {% for ann in announcements %}
+                <tr>
+                    <td>{{ ann[1] }}</td>
+                    <td><span class="badge purple">{{ ann[3] }}</span></td>
+                    <td>{{ ann[4].strftime('%d %b %Y') }}</td>
+                    <td><a href="/admin/delete_announcement/{{ ann[0] }}" class="btn-sm red">🗑️ Delete</a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="text-align:center;">No announcements yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+</body>
+</html>
