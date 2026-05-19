@@ -16,6 +16,7 @@
         <a href="#users" class="nav-link">👥 Manage Users</a>
         <a href="#subjects" class="nav-link">📚 Subjects</a>
         <a href="#assign" class="nav-link">🔗 Assign Teachers</a>
+        <a href="#all_materials" class="nav-link">📁 All Materials</a>
         <a href="#announcements" class="nav-link">📢 Announcements</a>
     </nav>
     <a href="/logout" class="logout-btn">🚪 Logout</a>
@@ -109,20 +110,21 @@
                             <span class="badge green">Active</span>
                         {% endif %}
                     </td>
-              <td class="action-btns">
-    {% if user[5] == 0 %}
-        <a href="/admin/approve/{{ user[0] }}" class="btn-sm green">✅ Approve</a>
-    {% endif %}
-    <a href="/admin/block/{{ user[0] }}" class="btn-sm {% if user[6] == 1 %}blue{% else %}red{% endif %}">
-        {% if user[6] == 1 %}🔓 Unblock{% else %}🚫 Block{% endif %}
-    </a>
-    <a href="/admin/delete_user/{{ user[0] }}"
-       onclick="return confirm('Permanently delete this user and all their data?')"
-       class="btn-sm red">🗑️ Delete</a>
-</td>
+                    <td class="action-btns">
+                        {% if user[5] == 0 %}
+                            <a href="/admin/approve/{{ user[0] }}" class="btn-sm green">✅ Approve</a>
+                        {% endif %}
+                        <a href="/admin/block/{{ user[0] }}" class="btn-sm {% if user[6] == 1 %}blue{% else %}orange{% endif %}">
+                            {% if user[6] == 1 %}🔓 Unblock{% else %}🚫 Block{% endif %}
+                        </a>
+                        <a href="/admin/edit_user/{{ user[0] }}" class="btn-sm blue">✏️ Edit</a>
+                        <a href="/admin/delete_user/{{ user[0] }}"
+                           onclick="return confirm('Are you sure you want to permanently delete {{ user[1] }}? This will also delete all their data!')"
+                           class="btn-sm red">🗑️ Delete</a>
+                    </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="6" style="text-align:center;">No users registered yet.</td></tr>
+                <tr><td colspan="6" style="text-align:center; color:#888;">No users registered yet.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>
@@ -140,74 +142,34 @@
         <div class="table-wrapper" style="margin-top:15px;">
             <table class="data-table">
                 <thead>
-                    <tr><th>#</th><th>Subject</th><th>Class</th></tr>
+                    <tr>
+                        <th>#</th>
+                        <th>Subject</th>
+                        <th>Class</th>
+                        <th>Actions</th>
+                    </tr>
                 </thead>
                 <tbody>
                 {% for sub in subjects %}
-<tr>
-    <td>{{ sub[0] }}</td>
-    <td>{{ sub[1] }}</td>
-    <td>{{ sub[2] }}</td>
-    <td>
-        <a href="/admin/delete_subject/{{ sub[0] }}"
-           onclick="return confirm('Delete this subject and all related data?')"
-           class="btn-sm red">🗑️ Delete</a>
-    </td>
-</tr>
-{% endfor %}
+                <tr>
+                    <td>{{ sub[0] }}</td>
+                    <td>{{ sub[1] }}</td>
+                    <td>{{ sub[2] }}</td>
+                    <td class="action-btns">
+                        <a href="/admin/edit_subject/{{ sub[0] }}" class="btn-sm blue">✏️ Edit</a>
+                        <a href="/admin/delete_subject/{{ sub[0] }}"
+                           onclick="return confirm('Delete {{ sub[1] }}? This will also delete all related materials and assignments!')"
+                           class="btn-sm red">🗑️ Delete</a>
+                    </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="3" style="text-align:center;">No subjects added yet.</td></tr>
+                <tr><td colspan="4" style="text-align:center; color:#888;">No subjects added yet.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
-    
-<!-- ALL UPLOADED MATERIALS -->
-<div id="all_materials" class="section-card">
-    <h2>📁 All Uploaded Materials</h2>
-    <div class="table-wrapper">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Title</th>
-                    <th>Subject</th>
-                    <th>Teacher</th>
-                    <th>Type</th>
-                    <th>Date</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
-            <tbody>
-            {% for mat in all_materials %}
-            <tr>
-                <td>{{ mat[1] }}</td>
-                <td>{{ mat[6] }}</td>
-                <td>{{ mat[7] }}</td>
-                <td>
-                    {% if mat[3] == 'notes' %}<span class="badge green">📝 Notes</span>
-                    {% elif mat[3] == 'assignment' %}<span class="badge orange">📌 Assignment</span>
-                    {% elif mat[3] == 'question_paper' %}<span class="badge blue">📄 Question Paper</span>
-                    {% else %}<span class="badge purple">📢 Update</span>{% endif %}
-                </td>
-                <td>{{ mat[5].strftime('%d %b %Y') }}</td>
-                <td>
-                    {% if mat[4] %}
-                    <a href="/static/uploads/{{ mat[4] }}" target="_blank" class="btn-sm blue">📥 View</a>
-                    {% endif %}
-                    <a href="/admin/delete_material/{{ mat[0] }}"
-                       onclick="return confirm('Delete this material?')"
-                       class="btn-sm red">🗑️ Delete</a>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="6" style="text-align:center;">No materials uploaded yet.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
+
     <!-- ASSIGN TEACHERS -->
     <div id="assign" class="section-card">
         <h2>🔗 Assign Subjects to Teachers</h2>
@@ -229,7 +191,13 @@
         <div class="table-wrapper" style="margin-top:15px;">
             <table class="data-table">
                 <thead>
-                    <tr><th>#</th><th>Teacher</th><th>Subject</th><th>Class</th><th>Action</th></tr>
+                    <tr>
+                        <th>#</th>
+                        <th>Teacher</th>
+                        <th>Subject</th>
+                        <th>Class</th>
+                        <th>Action</th>
+                    </tr>
                 </thead>
                 <tbody>
                 {% for a in assignments %}
@@ -238,10 +206,59 @@
                     <td>{{ a[1] }}</td>
                     <td>{{ a[2] }}</td>
                     <td>{{ a[3] }}</td>
-                    <td><a href="/admin/remove_assignment/{{ a[0] }}" class="btn-sm red">🗑️ Remove</a></td>
+                    <td>
+                        <a href="/admin/remove_assignment/{{ a[0] }}"
+                           onclick="return confirm('Remove this assignment?')"
+                           class="btn-sm red">🗑️ Remove</a>
+                    </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="5" style="text-align:center;">No assignments yet.</td></tr>
+                <tr><td colspan="5" style="text-align:center; color:#888;">No assignments yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ALL MATERIALS -->
+    <div id="all_materials" class="section-card">
+        <h2>📁 All Uploaded Materials</h2>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Subject</th>
+                        <th>Teacher</th>
+                        <th>Type</th>
+                        <th>Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for mat in all_materials %}
+                <tr>
+                    <td>{{ mat[1] }}</td>
+                    <td>{{ mat[6] }}</td>
+                    <td>{{ mat[7] }}</td>
+                    <td>
+                        {% if mat[3] == 'notes' %}<span class="badge green">📝 Notes</span>
+                        {% elif mat[3] == 'assignment' %}<span class="badge orange">📌 Assignment</span>
+                        {% elif mat[3] == 'question_paper' %}<span class="badge blue">📄 Question Paper</span>
+                        {% else %}<span class="badge purple">📢 Update</span>{% endif %}
+                    </td>
+                    <td>{{ mat[5].strftime('%d %b %Y') }}</td>
+                    <td class="action-btns">
+                        {% if mat[4] %}
+                        <a href="/static/uploads/{{ mat[4] }}" target="_blank" class="btn-sm blue">📥 View</a>
+                        {% endif %}
+                        <a href="/admin/delete_material/{{ mat[0] }}"
+                           onclick="return confirm('Delete this material and all related submissions?')"
+                           class="btn-sm red">🗑️ Delete</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" style="text-align:center; color:#888;">No materials uploaded yet.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>
@@ -262,26 +279,44 @@
             </select>
             <textarea name="content" placeholder="Write announcement here..." required></textarea>
             <div class="form-group-dash">
-    <label>Attach File (Optional)</label>
-    <input type="file" name="file">
-</div>
-<button type="submit" class="btn-primary-sm">📢 Post</button>
+                <label>Attach File (Optional)</label>
+                <input type="file" name="file">
+            </div>
+            <button type="submit" class="btn-primary-sm">📢 Post</button>
         </form>
         <div class="table-wrapper" style="margin-top:20px;">
             <table class="data-table">
                 <thead>
-                    <tr><th>Title</th><th>Category</th><th>Date</th><th>Action</th></tr>
+                    <tr>
+                        <th>Title</th>
+                        <th>Category</th>
+                        <th>Attachment</th>
+                        <th>Date</th>
+                        <th>Actions</th>
+                    </tr>
                 </thead>
                 <tbody>
                 {% for ann in announcements %}
                 <tr>
                     <td>{{ ann[1] }}</td>
                     <td><span class="badge purple">{{ ann[3] }}</span></td>
+                    <td>
+                        {% if ann[5] %}
+                        <a href="/static/uploads/{{ ann[5] }}" target="_blank" class="btn-sm blue">📎 View</a>
+                        {% else %}
+                        <span style="color:#888; font-size:12px;">No file</span>
+                        {% endif %}
+                    </td>
                     <td>{{ ann[4].strftime('%d %b %Y') }}</td>
-                    <td><a href="/admin/delete_announcement/{{ ann[0] }}" class="btn-sm red">🗑️ Delete</a></td>
+                    <td class="action-btns">
+                        <a href="/admin/edit_announcement/{{ ann[0] }}" class="btn-sm blue">✏️ Edit</a>
+                        <a href="/admin/delete_announcement/{{ ann[0] }}"
+                           onclick="return confirm('Delete this announcement?')"
+                           class="btn-sm red">🗑️ Delete</a>
+                    </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="4" style="text-align:center;">No announcements yet.</td></tr>
+                <tr><td colspan="5" style="text-align:center; color:#888;">No announcements yet.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>
