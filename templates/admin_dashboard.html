@@ -197,7 +197,7 @@
     <!-- ANNOUNCEMENTS -->
     <div id="announcements" class="section-card">
         <h2>📢 Post Announcement</h2>
-        <form method="POST" action="/admin/announcement" class="announce-form">
+        <form method="POST" action="/admin/announcement" class="announce-form" enctype="multipart/form-data">
             <input type="text" name="title" placeholder="Announcement Title" required>
             <select name="category" required>
                 <option value="">-- Category --</option>
@@ -207,7 +207,11 @@
                 <option value="general">📌 General</option>
             </select>
             <textarea name="content" placeholder="Write announcement here..." required></textarea>
-            <button type="submit" class="btn-primary-sm">📢 Post</button>
+            <div class="form-group-dash">
+    <label>Attach File (Optional)</label>
+    <input type="file" name="file">
+</div>
+<button type="submit" class="btn-primary-sm">📢 Post</button>
         </form>
         <div class="table-wrapper" style="margin-top:20px;">
             <table class="data-table">

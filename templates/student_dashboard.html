@@ -100,6 +100,13 @@
                 <h3>{{ ann[1] }}</h3>
                 <p>{{ ann[2] }}</p>
                 <small>📅 {{ ann[4].strftime('%d %b %Y') }}</small>
+                {% if ann[5] %}
+                <a href="/static/uploads/{{ ann[5] }}" target="_blank"
+                   class="btn-sm blue"
+                   style="margin-top:8px; display:inline-block;">
+                    📎 Download Attachment
+                </a>
+                {% endif %}
             </div>
             {% endfor %}
         </div>
@@ -118,8 +125,7 @@
                 <div class="subject-icon">📖</div>
                 <h3>{{ sub[1] }}</h3>
                 <p>Class: {{ sub[2] }}</p>
-                <a href="/student/unenroll/{{ sub[0] }}"
-                   class="unenroll-btn">✖ Unenroll</a>
+                <a href="/student/unenroll/{{ sub[0] }}" class="unenroll-btn">✖ Unenroll</a>
             </div>
             {% endfor %}
         </div>
@@ -152,9 +158,13 @@
                     <a href="/static/uploads/{{ mat[4] }}" target="_blank" class="btn-sm blue">📥 Download</a>
                     {% endif %}
                     {% if mat[3] == 'question_paper' or mat[3] == 'assignment' %}
-                    <form method="POST" action="/student/submit/{{ mat[0] }}" enctype="multipart/form-data" style="display:flex; gap:5px; margin-top:6px;">
-                        <input type="file" name="file" required style="font-size:11px; width:140px;">
-                        <button type="submit" class="btn-primary-sm" style="padding:4px 10px; font-size:12px;">📤 Submit</button>
+                    <form method="POST" action="/student/submit/{{ mat[0] }}"
+                          enctype="multipart/form-data"
+                          style="display:flex; gap:5px; margin-top:6px; flex-wrap:wrap;">
+                        <input type="file" name="file" required
+                               style="font-size:11px; width:140px;">
+                        <button type="submit" class="btn-primary-sm"
+                                style="padding:4px 10px; font-size:12px;">📤 Submit</button>
                     </form>
                     {% endif %}
                 </div>
@@ -184,7 +194,10 @@
                 <tr>
                     <td>{{ sub[1] }}</td>
                     <td>{{ sub[2].strftime('%d %b %Y') }}</td>
-                    <td><a href="/static/uploads/{{ sub[4] }}" target="_blank" class="btn-sm blue">📥 View</a></td>
+                    <td>
+                        <a href="/static/uploads/{{ sub[4] }}" target="_blank"
+                           class="btn-sm blue">📥 View</a>
+                    </td>
                     <td>
                         {% if sub[3] %}
                         <span class="badge green">{{ sub[3] }}</span>
@@ -194,7 +207,11 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="4" style="text-align:center;">No submissions yet.</td></tr>
+                <tr>
+                    <td colspan="4" style="text-align:center; color:#888;">
+                        No submissions yet.
+                    </td>
+                </tr>
                 {% endfor %}
                 </tbody>
             </table>
@@ -227,7 +244,11 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="3" style="text-align:center;">No subjects available yet.</td></tr>
+                <tr>
+                    <td colspan="3" style="text-align:center; color:#888;">
+                        No subjects available yet.
+                    </td>
+                </tr>
                 {% endfor %}
                 </tbody>
             </table>

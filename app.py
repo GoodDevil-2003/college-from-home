@@ -19,7 +19,13 @@ mysql = MySQL(app)
 
 # ─── FILE UPLOAD CONFIG ────────────────────────────────
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
-ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'mp4'}
+ALLOWED_EXTENSIONS = {
+    'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx',
+    'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp',
+    'mp4', 'avi', 'mkv', 'mov', 'wmv',
+    'mp3', 'wav',
+    'txt', 'csv', 'zip', 'rar'
+}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 def allowed_file(filename):
@@ -220,8 +226,15 @@ def post_announcement():
     title = request.form['title']
     content = request.form['content']
     category = request.form['category']
+    file_path = None
+    file = request.files.get('file')
+    if file and file.filename != '':
+        filename = secure_filename(file.filename)
+        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        file_path = filename
     cur = mysql.connection.cursor()
-    cur.execute("INSERT INTO announcements (title, content, category) VALUES (%s, %s, %s)", (title, content, category))
+    cur.execute("INSERT INTO announcements (title, content, category, file_path) VALUES (%s, %s, %s, %s)",
+                (title, content, category, file_path))
     mysql.connection.commit()
     cur.close()
     flash('Announcement posted successfully!', 'success')
