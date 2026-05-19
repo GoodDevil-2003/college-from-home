@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Material - College From Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="dash-body">
+<div class="sidebar">
+    <div class="sidebar-logo">🎓 CFH</div>
+    <nav>
+        <a href="/teacher" class="nav-link">📚 Dashboard</a>
+        <a href="/teacher#materials" class="nav-link active">📁 My Materials</a>
+    </nav>
+    <a href="/logout" class="logout-btn">🚪 Logout</a>
+</div>
+<div class="main-content">
+    <div class="dash-header">
+        <h1>✏️ Edit Material</h1>
+        <a href="/teacher" class="btn-primary-sm">← Back to Dashboard</a>
+    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}{% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}{% endif %}
+    {% endwith %}
+    <div class="section-card" style="max-width:600px;">
+        <h2>✏️ Edit Material Details</h2>
+        <form method="POST" action="/teacher/edit_material/{{ material[0] }}"
+              class="upload-form" enctype="multipart/form-data">
+            <div class="form-group-dash">
+                <label>Subject</label>
+                <input type="text" value="{{ material[8] }}" disabled
+                       style="background:#f8f9fa; color:#888;">
+            </div>
+            <div class="form-group-dash">
+                <label>Title</label>
+                <input type="text" name="title" value="{{ material[1] }}" required>
+            </div>
+            <div class="form-group-dash">
+                <label>Material Type</label>
+                <select name="material_type" required>
+                    <option value="notes" {% if material[5] == 'notes' %}selected{% endif %}>📝 Notes</option>
+                    <option value="assignment" {% if material[5] == 'assignment' %}selected{% endif %}>📌 Assignment</option>
+                    <option value="question_paper" {% if material[5] == 'question_paper' %}selected{% endif %}>📄 Question Paper</option>
+                    <option value="update" {% if material[5] == 'update' %}selected{% endif %}>📢 Update</option>
+                </select>
+            </div>
+            <div class="form-group-dash">
+                <label>Description</label>
+                <textarea name="description">{{ material[2] }}</textarea>
+            </div>
+            <div class="form-group-dash">
+                <label>Replace File (leave empty to keep existing)</label>
+                {% if material[4] %}
+                <p style="font-size:12px; color:#888;">
+                    Current file:
+                    <a href="/static/uploads/{{ material[4] }}" target="_blank">
+                        📎 {{ material[4] }}
+                    </a>
+                </p>
+                {% endif %}
+                <input type="file" name="file">
+            </div>
+            <button type="submit" class="btn-primary-sm">💾 Save Changes</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

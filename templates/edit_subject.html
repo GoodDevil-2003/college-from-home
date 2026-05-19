@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Subject - College From Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="dash-body">
+<div class="sidebar">
+    <div class="sidebar-logo">🎓 CFH</div>
+    <nav>
+        <a href="/admin" class="nav-link">👑 Dashboard</a>
+        <a href="/admin#subjects" class="nav-link active">📚 Subjects</a>
+    </nav>
+    <a href="/logout" class="logout-btn">🚪 Logout</a>
+</div>
+<div class="main-content">
+    <div class="dash-header">
+        <h1>✏️ Edit Subject</h1>
+        <a href="/admin" class="btn-primary-sm">← Back to Dashboard</a>
+    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}{% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}{% endif %}
+    {% endwith %}
+    <div class="section-card" style="max-width:600px;">
+        <h2>✏️ Edit Subject Details</h2>
+        <form method="POST" action="/admin/edit_subject/{{ subject[0] }}" class="upload-form">
+            <div class="form-group-dash">
+                <label>Subject Name</label>
+                <input type="text" name="subject_name" value="{{ subject[1] }}" required>
+            </div>
+            <div class="form-group-dash">
+                <label>Class Name (e.g. FY, SY, TY)</label>
+                <input type="text" name="class_name" value="{{ subject[2] }}" required>
+            </div>
+            <button type="submit" class="btn-primary-sm">💾 Save Changes</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

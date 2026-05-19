@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Announcement - College From Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="dash-body">
+<div class="sidebar">
+    <div class="sidebar-logo">🎓 CFH</div>
+    <nav>
+        <a href="/admin" class="nav-link">👑 Dashboard</a>
+        <a href="/admin#announcements" class="nav-link active">📢 Announcements</a>
+    </nav>
+    <a href="/logout" class="logout-btn">🚪 Logout</a>
+</div>
+<div class="main-content">
+    <div class="dash-header">
+        <h1>✏️ Edit Announcement</h1>
+        <a href="/admin" class="btn-primary-sm">← Back to Dashboard</a>
+    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}{% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}{% endif %}
+    {% endwith %}
+    <div class="section-card" style="max-width:600px;">
+        <h2>✏️ Edit Announcement</h2>
+        <form method="POST" action="/admin/edit_announcement/{{ announcement[0] }}"
+              class="upload-form" enctype="multipart/form-data">
+            <div class="form-group-dash">
+                <label>Title</label>
+                <input type="text" name="title" value="{{ announcement[1] }}" required>
+            </div>
+            <div class="form-group-dash">
+                <label>Category</label>
+                <select name="category" required>
+                    <option value="fees" {% if announcement[3] == 'fees' %}selected{% endif %}>💰 Fees</option>
+                    <option value="exam" {% if announcement[3] == 'exam' %}selected{% endif %}>📝 Exam</option>
+                    <option value="event" {% if announcement[3] == 'event' %}selected{% endif %}>🎉 Event</option>
+                    <option value="general" {% if announcement[3] == 'general' %}selected{% endif %}>📌 General</option>
+                </select>
+            </div>
+            <div class="form-group-dash">
+                <label>Content</label>
+                <textarea name="content" required style="height:120px;">{{ announcement[2] }}</textarea>
+            </div>
+            <div class="form-group-dash">
+                <label>Attachment (leave empty to keep existing)</label>
+                {% if announcement[5] %}
+                <p style="font-size:12px; color:#888;">
+                    Current file:
+                    <a href="/static/uploads/{{ announcement[5] }}" target="_blank">
+                        📎 {{ announcement[5] }}
+                    </a>
+                </p>
+                {% endif %}
+                <input type="file" name="file">
+            </div>
+            <button type="submit" class="btn-primary-sm">💾 Save Changes</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

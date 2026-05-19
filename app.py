@@ -7,8 +7,6 @@ app = Flask(__name__)
 app.secret_key = 'collegefromhome_secret_key'
 
 # ─── DATABASE CONFIG ───────────────────────────────────
-import os
-
 app.config['MYSQL_HOST'] = os.environ.get('MYSQLHOST', 'localhost')
 app.config['MYSQL_USER'] = os.environ.get('MYSQLUSER', 'root')
 app.config['MYSQL_PASSWORD'] = os.environ.get('MYSQLPASSWORD', '')
@@ -17,14 +15,32 @@ app.config['MYSQL_PORT'] = int(os.environ.get('MYSQLPORT', 3306))
 
 mysql = MySQL(app)
 
+# ─── AUTO UPDATE DATABASE ──────────────────────────────
+def init_db():
+    try:
+        with app.app_context():
+            cur = mysql.connection.cursor()
+            cur.execute("""
+                SELECT COUNT(*) FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'announcements'
+                AND COLUMN_NAME = 'file_path'
+            """)
+            exists = cur.fetchone()[0]
+            if not exists:
+                cur.execute("ALTER TABLE announcements ADD COLUMN file_path VARCHAR(255) DEFAULT NULL")
+                mysql.connection.commit()
+            cur.close()
+    except Exception as e:
+        print(f"DB init error: {e}")
+
 # ─── FILE UPLOAD CONFIG ────────────────────────────────
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
 ALLOWED_EXTENSIONS = {
     'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx',
     'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp',
     'mp4', 'avi', 'mkv', 'mov', 'wmv',
-    'mp3', 'wav',
-    'txt', 'csv', 'zip', 'rar'
+    'mp3', 'wav', 'txt', 'csv', 'zip', 'rar'
 }
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -113,12 +129,21 @@ def admin_dashboard():
     cur.execute("SELECT u.id, u.full_name, u.email FROM users u WHERE u.role = 'teacher' AND u.is_approved = 1")
     teachers = cur.fetchall()
     cur.execute("""
-        SELECT ta.id, u.full_name, s.subject_name, s.class_name 
+        SELECT ta.id, u.full_name, s.subject_name, s.class_name
         FROM teacher_assignments ta
         JOIN users u ON ta.teacher_id = u.id
         JOIN subjects s ON ta.subject_id = s.id
     """)
     assignments = cur.fetchall()
+    cur.execute("""
+        SELECT m.id, m.title, m.description, m.material_type, m.file_path,
+               m.uploaded_at, s.subject_name, u.full_name
+        FROM materials m
+        JOIN subjects s ON m.subject_id = s.id
+        JOIN users u ON m.teacher_id = u.id
+        ORDER BY m.uploaded_at DESC
+    """)
+    all_materials = cur.fetchall()
     cur.close()
     return render_template('admin_dashboard.html',
         name=session['user_name'],
@@ -130,7 +155,8 @@ def admin_dashboard():
         announcements=announcements,
         subjects=subjects,
         teachers=teachers,
-        assignments=assignments
+        assignments=assignments,
+        all_materials=all_materials
     )
 
 # ─── APPROVE USER ──────────────────────────────────────
@@ -160,6 +186,49 @@ def block_user(user_id):
     flash('User block status updated!', 'success')
     return redirect(url_for('admin_dashboard'))
 
+# ─── DELETE USER ───────────────────────────────────────
+@app.route('/admin/delete_user/<int:user_id>')
+def delete_user(user_id):
+    if 'user_id' not in session or session['user_role'] != 'super_admin':
+        return redirect(url_for('login'))
+    cur = mysql.connection.cursor()
+    cur.execute("DELETE FROM teacher_assignments WHERE teacher_id = %s", (user_id,))
+    cur.execute("DELETE FROM student_enrollments WHERE student_id = %s", (user_id,))
+    cur.execute("DELETE FROM submissions WHERE student_id = %s", (user_id,))
+    cur.execute("SELECT id FROM materials WHERE teacher_id = %s", (user_id,))
+    materials = cur.fetchall()
+    for mat in materials:
+        cur.execute("DELETE FROM submissions WHERE material_id = %s", (mat[0],))
+    cur.execute("DELETE FROM materials WHERE teacher_id = %s", (user_id,))
+    cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
+    mysql.connection.commit()
+    cur.close()
+    flash('User deleted successfully!', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+# ─── EDIT USER ─────────────────────────────────────────
+@app.route('/admin/edit_user/<int:user_id>', methods=['GET', 'POST'])
+def edit_user(user_id):
+    if 'user_id' not in session or session['user_role'] != 'super_admin':
+        return redirect(url_for('login'))
+    cur = mysql.connection.cursor()
+    if request.method == 'POST':
+        full_name = request.form['full_name']
+        email = request.form['email']
+        password = request.form['password']
+        role = request.form['role']
+        cur.execute("""
+            UPDATE users SET full_name=%s, email=%s, password=%s, role=%s WHERE id=%s
+        """, (full_name, email, password, role, user_id))
+        mysql.connection.commit()
+        cur.close()
+        flash('User updated successfully!', 'success')
+        return redirect(url_for('admin_dashboard'))
+    cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+    user = cur.fetchone()
+    cur.close()
+    return render_template('edit_user.html', user=user)
+
 # ─── CHANGE USER ROLE ──────────────────────────────────
 @app.route('/admin/change_role/<int:user_id>', methods=['POST'])
 def change_role(user_id):
@@ -187,6 +256,45 @@ def add_subject():
     flash('Subject added successfully!', 'success')
     return redirect(url_for('admin_dashboard'))
 
+# ─── EDIT SUBJECT ──────────────────────────────────────
+@app.route('/admin/edit_subject/<int:subject_id>', methods=['GET', 'POST'])
+def edit_subject(subject_id):
+    if 'user_id' not in session or session['user_role'] != 'super_admin':
+        return redirect(url_for('login'))
+    cur = mysql.connection.cursor()
+    if request.method == 'POST':
+        subject_name = request.form['subject_name']
+        class_name = request.form['class_name']
+        cur.execute("UPDATE subjects SET subject_name=%s, class_name=%s WHERE id=%s",
+                    (subject_name, class_name, subject_id))
+        mysql.connection.commit()
+        cur.close()
+        flash('Subject updated successfully!', 'success')
+        return redirect(url_for('admin_dashboard'))
+    cur.execute("SELECT * FROM subjects WHERE id = %s", (subject_id,))
+    subject = cur.fetchone()
+    cur.close()
+    return render_template('edit_subject.html', subject=subject)
+
+# ─── DELETE SUBJECT ────────────────────────────────────
+@app.route('/admin/delete_subject/<int:subject_id>')
+def delete_subject(subject_id):
+    if 'user_id' not in session or session['user_role'] != 'super_admin':
+        return redirect(url_for('login'))
+    cur = mysql.connection.cursor()
+    cur.execute("DELETE FROM teacher_assignments WHERE subject_id = %s", (subject_id,))
+    cur.execute("DELETE FROM student_enrollments WHERE subject_id = %s", (subject_id,))
+    cur.execute("SELECT id FROM materials WHERE subject_id = %s", (subject_id,))
+    materials = cur.fetchall()
+    for mat in materials:
+        cur.execute("DELETE FROM submissions WHERE material_id = %s", (mat[0],))
+    cur.execute("DELETE FROM materials WHERE subject_id = %s", (subject_id,))
+    cur.execute("DELETE FROM subjects WHERE id = %s", (subject_id,))
+    mysql.connection.commit()
+    cur.close()
+    flash('Subject deleted successfully!', 'success')
+    return redirect(url_for('admin_dashboard'))
+
 # ─── ASSIGN SUBJECT TO TEACHER ─────────────────────────
 @app.route('/admin/assign_subject', methods=['POST'])
 def assign_subject():
@@ -195,12 +303,14 @@ def assign_subject():
     teacher_id = request.form['teacher_id']
     subject_id = request.form['subject_id']
     cur = mysql.connection.cursor()
-    cur.execute("SELECT * FROM teacher_assignments WHERE teacher_id = %s AND subject_id = %s", (teacher_id, subject_id))
+    cur.execute("SELECT * FROM teacher_assignments WHERE teacher_id = %s AND subject_id = %s",
+                (teacher_id, subject_id))
     existing = cur.fetchone()
     if existing:
         flash('This subject is already assigned to this teacher!', 'warning')
     else:
-        cur.execute("INSERT INTO teacher_assignments (teacher_id, subject_id) VALUES (%s, %s)", (teacher_id, subject_id))
+        cur.execute("INSERT INTO teacher_assignments (teacher_id, subject_id) VALUES (%s, %s)",
+                    (teacher_id, subject_id))
         mysql.connection.commit()
         flash('Subject assigned to teacher successfully!', 'success')
     cur.close()
@@ -240,16 +350,71 @@ def post_announcement():
     flash('Announcement posted successfully!', 'success')
     return redirect(url_for('admin_dashboard'))
 
+# ─── EDIT ANNOUNCEMENT ─────────────────────────────────
+@app.route('/admin/edit_announcement/<int:ann_id>', methods=['GET', 'POST'])
+def edit_announcement(ann_id):
+    if 'user_id' not in session or session['user_role'] != 'super_admin':
+        return redirect(url_for('login'))
+    cur = mysql.connection.cursor()
+    if request.method == 'POST':
+        title = request.form['title']
+        content = request.form['content']
+        category = request.form['category']
+        file = request.files.get('file')
+        cur.execute("SELECT file_path FROM announcements WHERE id = %s", (ann_id,))
+        ann = cur.fetchone()
+        file_path = ann[0] if ann else None
+        if file and file.filename != '':
+            filename = secure_filename(file.filename)
+            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            file_path = filename
+        cur.execute("""
+            UPDATE announcements SET title=%s, content=%s, category=%s, file_path=%s WHERE id=%s
+        """, (title, content, category, file_path, ann_id))
+        mysql.connection.commit()
+        cur.close()
+        flash('Announcement updated successfully!', 'success')
+        return redirect(url_for('admin_dashboard'))
+    cur.execute("SELECT * FROM announcements WHERE id = %s", (ann_id,))
+    announcement = cur.fetchone()
+    cur.close()
+    return render_template('edit_announcement.html', announcement=announcement)
+
 # ─── DELETE ANNOUNCEMENT ───────────────────────────────
 @app.route('/admin/delete_announcement/<int:ann_id>')
 def delete_announcement(ann_id):
     if 'user_id' not in session or session['user_role'] != 'super_admin':
         return redirect(url_for('login'))
     cur = mysql.connection.cursor()
+    cur.execute("SELECT file_path FROM announcements WHERE id = %s", (ann_id,))
+    ann = cur.fetchone()
+    if ann and ann[0]:
+        file_full_path = os.path.join(app.config['UPLOAD_FOLDER'], ann[0])
+        if os.path.exists(file_full_path):
+            os.remove(file_full_path)
     cur.execute("DELETE FROM announcements WHERE id = %s", (ann_id,))
     mysql.connection.commit()
     cur.close()
     flash('Announcement deleted!', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+# ─── DELETE MATERIAL (ADMIN) ───────────────────────────
+@app.route('/admin/delete_material/<int:material_id>')
+def admin_delete_material(material_id):
+    if 'user_id' not in session or session['user_role'] != 'super_admin':
+        return redirect(url_for('login'))
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT file_path FROM materials WHERE id = %s", (material_id,))
+    material = cur.fetchone()
+    if material and material[0]:
+        file_full_path = os.path.join(app.config['UPLOAD_FOLDER'], material[0])
+        if os.path.exists(file_full_path):
+            os.remove(file_full_path)
+    cur.execute("DELETE FROM submissions WHERE material_id = %s", (material_id,))
+    cur.execute("DELETE FROM materials WHERE id = %s", (material_id,))
+    mysql.connection.commit()
+    cur.close()
+    flash('Material deleted!', 'success')
     return redirect(url_for('admin_dashboard'))
 
 # ─── TEACHER DASHBOARD ─────────────────────────────────
@@ -259,13 +424,12 @@ def teacher_dashboard():
         return redirect(url_for('login'))
     cur = mysql.connection.cursor()
     cur.execute("""
-        SELECT s.id, s.subject_name, s.class_name 
+        SELECT s.id, s.subject_name, s.class_name
         FROM teacher_assignments ta
         JOIN subjects s ON ta.subject_id = s.id
         WHERE ta.teacher_id = %s
     """, (session['user_id'],))
     assigned_subjects = cur.fetchall()
-
     cur.execute("""
         SELECT m.id, m.title, m.material_type, m.uploaded_at, s.subject_name
         FROM materials m
@@ -274,7 +438,6 @@ def teacher_dashboard():
         ORDER BY m.uploaded_at DESC
     """, (session['user_id'],))
     my_materials = cur.fetchall()
-
     cur.execute("""
         SELECT sub.id, u.full_name, m.title, sub.submitted_at, sub.file_path, sub.teacher_remark, sub.id
         FROM submissions sub
@@ -284,13 +447,11 @@ def teacher_dashboard():
         ORDER BY sub.submitted_at DESC
     """, (session['user_id'],))
     submissions = cur.fetchall()
-
-    cur.execute("SELECT COUNT(*) FROM submissions sub JOIN materials m ON sub.material_id = m.id WHERE m.teacher_id = %s", (session['user_id'],))
+    cur.execute("SELECT COUNT(*) FROM submissions sub JOIN materials m ON sub.material_id = m.id WHERE m.teacher_id = %s",
+                (session['user_id'],))
     total_submissions = cur.fetchone()[0]
-
     cur.execute("SELECT COUNT(*) FROM materials WHERE teacher_id = %s", (session['user_id'],))
     total_materials = cur.fetchone()[0]
-
     cur.close()
     return render_template('teacher_dashboard.html',
         name=session['user_name'],
@@ -312,7 +473,7 @@ def upload_material():
     material_type = request.form['material_type']
     file = request.files['file']
     file_path = None
-    if file and allowed_file(file.filename):
+    if file and file.filename != '':
         filename = secure_filename(file.filename)
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         file_path = filename
@@ -326,20 +487,60 @@ def upload_material():
     flash('Material uploaded successfully!', 'success')
     return redirect(url_for('teacher_dashboard'))
 
-# ─── DELETE MATERIAL ───────────────────────────────────
+# ─── DELETE MATERIAL (TEACHER) ─────────────────────────
 @app.route('/teacher/delete_material/<int:material_id>')
 def delete_material(material_id):
     if 'user_id' not in session or session['user_role'] != 'teacher':
         return redirect(url_for('login'))
     cur = mysql.connection.cursor()
-    # First delete all student submissions linked to this material
+    cur.execute("SELECT file_path FROM materials WHERE id = %s AND teacher_id = %s",
+                (material_id, session['user_id']))
+    material = cur.fetchone()
+    if material and material[0]:
+        file_full_path = os.path.join(app.config['UPLOAD_FOLDER'], material[0])
+        if os.path.exists(file_full_path):
+            os.remove(file_full_path)
     cur.execute("DELETE FROM submissions WHERE material_id = %s", (material_id,))
-    # Then delete the material itself
-    cur.execute("DELETE FROM materials WHERE id = %s AND teacher_id = %s", (material_id, session['user_id']))
+    cur.execute("DELETE FROM materials WHERE id = %s AND teacher_id = %s",
+                (material_id, session['user_id']))
     mysql.connection.commit()
     cur.close()
-    flash('Material and related submissions deleted!', 'success')
+    flash('Material deleted!', 'success')
     return redirect(url_for('teacher_dashboard'))
+
+# ─── EDIT MATERIAL (TEACHER) ───────────────────────────
+@app.route('/teacher/edit_material/<int:material_id>', methods=['GET', 'POST'])
+def edit_material(material_id):
+    if 'user_id' not in session or session['user_role'] != 'teacher':
+        return redirect(url_for('login'))
+    cur = mysql.connection.cursor()
+    if request.method == 'POST':
+        title = request.form['title']
+        description = request.form['description']
+        material_type = request.form['material_type']
+        file = request.files.get('file')
+        cur.execute("SELECT file_path FROM materials WHERE id = %s", (material_id,))
+        mat = cur.fetchone()
+        file_path = mat[0] if mat else None
+        if file and file.filename != '':
+            filename = secure_filename(file.filename)
+            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            file_path = filename
+        cur.execute("""
+            UPDATE materials SET title=%s, description=%s, material_type=%s, file_path=%s WHERE id=%s
+        """, (title, description, material_type, file_path, material_id))
+        mysql.connection.commit()
+        cur.close()
+        flash('Material updated successfully!', 'success')
+        return redirect(url_for('teacher_dashboard'))
+    cur.execute("""
+        SELECT m.*, s.subject_name FROM materials m
+        JOIN subjects s ON m.subject_id = s.id
+        WHERE m.id = %s
+    """, (material_id,))
+    material = cur.fetchone()
+    cur.close()
+    return render_template('edit_material.html', material=material)
 
 # ─── ADD REMARK ON SUBMISSION ──────────────────────────
 @app.route('/teacher/remark/<int:submission_id>', methods=['POST'])
@@ -360,12 +561,8 @@ def student_dashboard():
     if 'user_id' not in session or session['user_role'] != 'student':
         return redirect(url_for('login'))
     cur = mysql.connection.cursor()
-
-    # Get all available subjects
     cur.execute("SELECT * FROM subjects ORDER BY class_name")
     all_subjects = cur.fetchall()
-
-    # Get enrolled subjects
     cur.execute("""
         SELECT s.id, s.subject_name, s.class_name
         FROM student_enrollments se
@@ -373,27 +570,22 @@ def student_dashboard():
         WHERE se.student_id = %s
     """, (session['user_id'],))
     enrolled_subjects = cur.fetchall()
-
     enrolled_ids = [s[0] for s in enrolled_subjects]
-
-    # Get materials for enrolled subjects
-    cur.execute("""
-        SELECT m.id, m.title, m.description, m.material_type, m.file_path,
-               m.uploaded_at, s.subject_name, u.full_name
-        FROM materials m
-        JOIN subjects s ON m.subject_id = s.id
-        JOIN users u ON m.teacher_id = u.id
-        WHERE m.subject_id IN %s
-        ORDER BY m.uploaded_at DESC
-    """ if enrolled_ids else "SELECT NULL LIMIT 0",
-    (tuple(enrolled_ids),) if enrolled_ids else ())
-    materials = cur.fetchall() if enrolled_ids else []
-
-    # Get announcements
+    materials = []
+    if enrolled_ids:
+        format_strings = ','.join(['%s'] * len(enrolled_ids))
+        cur.execute("""
+            SELECT m.id, m.title, m.description, m.material_type, m.file_path,
+                   m.uploaded_at, s.subject_name, u.full_name
+            FROM materials m
+            JOIN subjects s ON m.subject_id = s.id
+            JOIN users u ON m.teacher_id = u.id
+            WHERE m.subject_id IN (%s)
+            ORDER BY m.uploaded_at DESC
+        """ % format_strings, tuple(enrolled_ids))
+        materials = cur.fetchall()
     cur.execute("SELECT * FROM announcements ORDER BY posted_at DESC")
     announcements = cur.fetchall()
-
-    # Get student's submissions
     cur.execute("""
         SELECT sub.id, m.title, sub.submitted_at, sub.teacher_remark, sub.file_path
         FROM submissions sub
@@ -402,7 +594,6 @@ def student_dashboard():
         ORDER BY sub.submitted_at DESC
     """, (session['user_id'],))
     my_submissions = cur.fetchall()
-
     cur.close()
     return render_template('student_dashboard.html',
         name=session['user_name'],
@@ -452,9 +643,8 @@ def submit_paper(material_id):
     if 'user_id' not in session or session['user_role'] != 'student':
         return redirect(url_for('login'))
     file = request.files['file']
-    if file and allowed_file(file.filename):
+    if file and file.filename != '':
         filename = secure_filename(file.filename)
-        # Add student id prefix to avoid name conflicts
         filename = f"student_{session['user_id']}_{filename}"
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         cur = mysql.connection.cursor()
@@ -466,7 +656,7 @@ def submit_paper(material_id):
         cur.close()
         flash('Assignment submitted successfully!', 'success')
     else:
-        flash('Invalid file type!', 'danger')
+        flash('Please select a file!', 'danger')
     return redirect(url_for('student_dashboard'))
 
 # ─── LOGOUT ────────────────────────────────────────────
@@ -477,6 +667,7 @@ def logout():
     return redirect(url_for('login'))
 
 if __name__ == '__main__':
-    import os
+    with app.app_context():
+        init_db()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
