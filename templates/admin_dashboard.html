@@ -109,14 +109,17 @@
                             <span class="badge green">Active</span>
                         {% endif %}
                     </td>
-                    <td class="action-btns">
-                        {% if user[5] == 0 %}
-                            <a href="/admin/approve/{{ user[0] }}" class="btn-sm green">✅ Approve</a>
-                        {% endif %}
-                        <a href="/admin/block/{{ user[0] }}" class="btn-sm {% if user[6] == 1 %}blue{% else %}red{% endif %}">
-                            {% if user[6] == 1 %}🔓 Unblock{% else %}🚫 Block{% endif %}
-                        </a>
-                    </td>
+              <td class="action-btns">
+    {% if user[5] == 0 %}
+        <a href="/admin/approve/{{ user[0] }}" class="btn-sm green">✅ Approve</a>
+    {% endif %}
+    <a href="/admin/block/{{ user[0] }}" class="btn-sm {% if user[6] == 1 %}blue{% else %}red{% endif %}">
+        {% if user[6] == 1 %}🔓 Unblock{% else %}🚫 Block{% endif %}
+    </a>
+    <a href="/admin/delete_user/{{ user[0] }}"
+       onclick="return confirm('Permanently delete this user and all their data?')"
+       class="btn-sm red">🗑️ Delete</a>
+</td>
                 </tr>
                 {% else %}
                 <tr><td colspan="6" style="text-align:center;">No users registered yet.</td></tr>
@@ -141,10 +144,17 @@
                 </thead>
                 <tbody>
                 {% for sub in subjects %}
-                <tr>
-                    <td>{{ sub[0] }}</td>
-                    <td>{{ sub[1] }}</td>
-                    <td>{{ sub[2] }}</td>
+<tr>
+    <td>{{ sub[0] }}</td>
+    <td>{{ sub[1] }}</td>
+    <td>{{ sub[2] }}</td>
+    <td>
+        <a href="/admin/delete_subject/{{ sub[0] }}"
+           onclick="return confirm('Delete this subject and all related data?')"
+           class="btn-sm red">🗑️ Delete</a>
+    </td>
+</tr>
+{% endfor %}
                 </tr>
                 {% else %}
                 <tr><td colspan="3" style="text-align:center;">No subjects added yet.</td></tr>
@@ -153,7 +163,51 @@
             </table>
         </div>
     </div>
-
+    
+<!-- ALL UPLOADED MATERIALS -->
+<div id="all_materials" class="section-card">
+    <h2>📁 All Uploaded Materials</h2>
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Subject</th>
+                    <th>Teacher</th>
+                    <th>Type</th>
+                    <th>Date</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for mat in all_materials %}
+            <tr>
+                <td>{{ mat[1] }}</td>
+                <td>{{ mat[6] }}</td>
+                <td>{{ mat[7] }}</td>
+                <td>
+                    {% if mat[3] == 'notes' %}<span class="badge green">📝 Notes</span>
+                    {% elif mat[3] == 'assignment' %}<span class="badge orange">📌 Assignment</span>
+                    {% elif mat[3] == 'question_paper' %}<span class="badge blue">📄 Question Paper</span>
+                    {% else %}<span class="badge purple">📢 Update</span>{% endif %}
+                </td>
+                <td>{{ mat[5].strftime('%d %b %Y') }}</td>
+                <td>
+                    {% if mat[4] %}
+                    <a href="/static/uploads/{{ mat[4] }}" target="_blank" class="btn-sm blue">📥 View</a>
+                    {% endif %}
+                    <a href="/admin/delete_material/{{ mat[0] }}"
+                       onclick="return confirm('Delete this material?')"
+                       class="btn-sm red">🗑️ Delete</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" style="text-align:center;">No materials uploaded yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
     <!-- ASSIGN TEACHERS -->
     <div id="assign" class="section-card">
         <h2>🔗 Assign Subjects to Teachers</h2>
