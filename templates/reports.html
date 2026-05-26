@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports - College From Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .report-header { background: linear-gradient(135deg, #1a1a2e, #0f3460); color: white; padding: 20px 25px; border-radius: 12px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; }
+        .report-header h2 { margin: 0; font-size: 20px; }
+        .report-header small { opacity: 0.7; font-size: 13px; }
+        .export-btn { background: #27ae60; color: white; padding: 8px 18px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+        .export-btn:hover { background: #219a52; }
+        .export-btn.blue { background: #2980b9; }
+        .export-btn.blue:hover { background: #2471a3; }
+        .export-btn.purple { background: #8e44ad; }
+        .export-btn.purple:hover { background: #7d3c98; }
+        .export-btn.orange { background: #e67e22; }
+        .export-btn.orange:hover { background: #d35400; }
+        .export-btn.dark { background: #1a1a2e; }
+        .export-btn.dark:hover { background: #0f3460; }
+        .export-group { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
+        .stat-number { font-size: 32px; font-weight: 800; color: #1a1a2e; }
+        .report-note { font-size: 12px; color: #888; margin-top: 5px; }
+        @media print {
+            .sidebar, .export-group, .export-btn, .dash-header a { display: none !important; }
+            .main-content { margin-left: 0 !important; }
+        }
+    </style>
+</head>
+<body class="dash-body">
+
+<div class="sidebar">
+    <div class="sidebar-logo">🎓 CFH</div>
+    <nav>
+        <a href="/admin" class="nav-link">👑 Dashboard</a>
+        <a href="/admin/reports" class="nav-link active">📊 Reports</a>
+    </nav>
+    <a href="/logout" class="logout-btn">🚪 Logout</a>
+</div>
+
+<div class="main-content">
+
+    <!-- HEADER -->
+    <div class="dash-header">
+        <h1>📊 Super Admin Reports</h1>
+        <div style="display:flex; gap:10px; align-items:center;">
+            <small style="color:#888;">Generated: {{ generated_at }}</small>
+            <a href="/admin" class="btn-primary-sm">← Back</a>
+        </div>
+    </div>
+
+    <!-- EXPORT ALL BUTTON -->
+    <div class="section-card" style="background: linear-gradient(135deg,#1a1a2e,#0f3460); color:white;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
+            <div>
+                <h2 style="color:white; border-bottom-color:rgba(255,255,255,0.2); margin-bottom:5px;">📥 Export Complete Report</h2>
+                <p style="color:rgba(255,255,255,0.7); font-size:13px;">Download all data in one Excel/CSV file — Registrations, Uploads, Submissions, Announcements</p>
+            </div>
+            <a href="/admin/export/full" class="export-btn" style="background:#e94560; padding:12px 25px; font-size:15px;">
+                📊 Export Full Report (.csv)
+            </a>
+        </div>
+    </div>
+
+    <!-- STATS OVERVIEW -->
+    <div class="stats-grid">
+        <div class="stat-card blue">
+            <div class="stat-icon">👨‍🏫</div>
+            <div class="stat-info">
+                <div class="stat-number">{{ total_teachers }}</div>
+                <p>Total Teachers</p>
+            </div>
+        </div>
+        <div class="stat-card green">
+            <div class="stat-icon">🎒</div>
+            <div class="stat-info">
+                <div class="stat-number">{{ total_students }}</div>
+                <p>Total Students</p>
+            </div>
+        </div>
+        <div class="stat-card orange">
+            <div class="stat-icon">⏳</div>
+            <div class="stat-info">
+                <div class="stat-number">{{ pending_users }}</div>
+                <p>Pending Approvals</p>
+            </div>
+        </div>
+        <div class="stat-card purple">
+            <div class="stat-icon">🚫</div>
+            <div class="stat-info">
+                <div class="stat-number">{{ blocked_users }}</div>
+                <p>Blocked Users</p>
+            </div>
+        </div>
+        <div class="stat-card blue">
+            <div class="stat-icon">📁</div>
+            <div class="stat-info">
+                <div class="stat-number">{{ total_materials }}</div>
+                <p>Total Materials</p>
+            </div>
+        </div>
+        <div class="stat-card green">
+            <div class="stat-icon">📋</div>
+            <div class="stat-info">
+                <div class="stat-number">{{ total_submissions }}</div>
+                <p>Total Submissions</p>
+            </div>
+        </div>
+        <div class="stat-card orange">
+            <div class="stat-icon">📢</div>
+            <div class="stat-info">
+                <div class="stat-number">{{ total_announcements }}</div>
+                <p>Announcements</p>
+            </div>
+        </div>
+        <div class="stat-card purple">
+            <div class="stat-icon">📚</div>
+            <div class="stat-info">
+                <div class="stat-number">{{ total_subjects }}</div>
+                <p>Total Subjects</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- REGISTRATIONS REPORT -->
+    <div class="section-card">
+        <div class="report-header">
+            <div>
+                <h2>👥 User Registrations Report</h2>
+                <small>All registered teachers and students</small>
+            </div>
+            <a href="/admin/export/registrations" class="export-btn">📥 Export to Excel</a>
+        </div>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Full Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Blocked</th>
+                        <th>Registered On</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for reg in all_registrations %}
+                <tr>
+                    <td>{{ reg[0] }}</td>
+                    <td>{{ reg[1] }}</td>
+                    <td>{{ reg[2] }}</td>
+                    <td><span class="badge {% if reg[3] == 'teacher' %}blue{% else %}green{% endif %}">{{ reg[3] }}</span></td>
+                    <td><span class="badge {% if reg[4] == 1 %}green{% else %}orange{% endif %}">{% if reg[4] == 1 %}✅ Approved{% else %}⏳ Pending{% endif %}</span></td>
+                    <td><span class="badge {% if reg[5] == 1 %}red{% else %}green{% endif %}">{% if reg[5] == 1 %}🚫 Blocked{% else %}Active{% endif %}</span></td>
+                    <td>{{ reg[6].strftime('%d %b %Y') }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" style="text-align:center; color:#888;">No registrations yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- UPLOADS REPORT -->
+    <div class="section-card">
+        <div class="report-header">
+            <div>
+                <h2>📁 Uploaded Materials Report</h2>
+                <small>All files uploaded by teachers</small>
+            </div>
+            <a href="/admin/export/uploads" class="export-btn blue">📥 Export to Excel</a>
+        </div>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Title</th>
+                        <th>Type</th>
+                        <th>Subject</th>
+                        <th>Class</th>
+                        <th>Uploaded By</th>
+                        <th>File</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for up in all_uploads %}
+                <tr>
+                    <td>{{ up[0] }}</td>
+                    <td>{{ up[1] }}</td>
+                    <td>
+                        {% if up[2] == 'notes' %}<span class="badge green">📝 Notes</span>
+                        {% elif up[2] == 'assignment' %}<span class="badge orange">📌 Assignment</span>
+                        {% elif up[2] == 'question_paper' %}<span class="badge blue">📄 Q.Paper</span>
+                        {% else %}<span class="badge purple">📢 Update</span>{% endif %}
+                    </td>
+                    <td>{{ up[5] }}</td>
+                    <td>{{ up[6] }}</td>
+                    <td>{{ up[7] }}</td>
+                    <td>
+                        {% if up[3] %}
+                        <a href="/static/uploads/{{ up[3] }}" target="_blank" class="btn-sm blue">📥 View</a>
+                        {% else %}<span style="color:#888;">No file</span>{% endif %}
+                    </td>
+                    <td>{{ up[4].strftime('%d %b %Y') }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" style="text-align:center; color:#888;">No uploads yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- SUBMISSIONS REPORT -->
+    <div class="section-card">
+        <div class="report-header">
+            <div>
+                <h2>📋 Student Submissions Report</h2>
+                <small>All assignments submitted by students</small>
+            </div>
+            <a href="/admin/export/submissions" class="export-btn purple">📥 Export to Excel</a>
+        </div>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Student Name</th>
+                        <th>Assignment</th>
+                        <th>Subject</th>
+                        <th>Submitted On</th>
+                        <th>File</th>
+                        <th>Teacher Remark</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for sub in all_submissions %}
+                <tr>
+                    <td>{{ sub[0] }}</td>
+                    <td>{{ sub[1] }}</td>
+                    <td>{{ sub[2] }}</td>
+                    <td>{{ sub[3] }}</td>
+                    <td>{{ sub[4].strftime('%d %b %Y') }}</td>
+                    <td>
+                        {% if sub[6] %}
+                        <a href="/static/uploads/{{ sub[6] }}" target="_blank" class="btn-sm blue">📥 View</a>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if sub[5] %}
+                        <span class="badge green">{{ sub[5] }}</span>
+                        {% else %}
+                        <span class="badge orange">Pending</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" style="text-align:center; color:#888;">No submissions yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ANNOUNCEMENTS REPORT -->
+    <div class="section-card">
+        <div class="report-header">
+            <div>
+                <h2>📢 Announcements Report</h2>
+                <small>All college announcements posted</small>
+            </div>
+            <a href="/admin/export/announcements" class="export-btn orange">📥 Export to Excel</a>
+        </div>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Title</th>
+                        <th>Content</th>
+                        <th>Category</th>
+                        <th>Attachment</th>
+                        <th>Posted On</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for ann in all_announcements %}
+                <tr>
+                    <td>{{ ann[0] }}</td>
+                    <td>{{ ann[1] }}</td>
+                    <td style="max-width:200px;">{{ ann[2][:80] }}{% if ann[2]|length > 80 %}...{% endif %}</td>
+                    <td>
+                        <span class="badge
+                            {% if ann[3] == 'fees' %}orange
+                            {% elif ann[3] == 'exam' %}red
+                            {% elif ann[3] == 'event' %}green
+                            {% else %}purple{% endif %}">
+                            {{ ann[3]|upper }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if ann[5] %}
+                        <a href="/static/uploads/{{ ann[5] }}" target="_blank" class="btn-sm blue">📎 View</a>
+                        {% else %}<span style="color:#888;">None</span>{% endif %}
+                    </td>
+                    <td>{{ ann[4].strftime('%d %b %Y') }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" style="text-align:center; color:#888;">No announcements yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- SUBJECT STATS -->
+    <div class="section-card">
+        <h2>📚 Materials per Subject</h2>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr><th>Subject</th><th>Class</th><th>Total Materials</th></tr>
+                </thead>
+                <tbody>
+                {% for stat in subject_stats %}
+                <tr>
+                    <td>{{ stat[0] }}</td>
+                    <td>{{ stat[1] }}</td>
+                    <td><span class="badge blue">{{ stat[2] }}</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" style="text-align:center; color:#888;">No data yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- TEACHER STATS -->
+    <div class="section-card">
+        <h2>👨‍🏫 Uploads per Teacher</h2>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr><th>Teacher Name</th><th>Email</th><th>Total Uploads</th></tr>
+                </thead>
+                <tbody>
+                {% for stat in teacher_stats %}
+                <tr>
+                    <td>{{ stat[0] }}</td>
+                    <td>{{ stat[1] }}</td>
+                    <td><span class="badge green">{{ stat[2] }}</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" style="text-align:center; color:#888;">No data yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- STUDENT STATS -->
+    <div class="section-card">
+        <h2>🎒 Submissions per Student</h2>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr><th>Student Name</th><th>Email</th><th>Total Submissions</th></tr>
+                </thead>
+                <tbody>
+                {% for stat in student_stats %}
+                <tr>
+                    <td>{{ stat[0] }}</td>
+                    <td>{{ stat[1] }}</td>
+                    <td><span class="badge purple">{{ stat[2] }}</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" style="text-align:center; color:#888;">No data yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+</body>
+</html>
