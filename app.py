@@ -1,677 +1,4 @@
-sfrom flask import Flask, render_template, request, redirect, url_for, session, flash
-from flask_mysqldb import MySQL
-import os
-from werkzeug.utils import secure_filename
-
-app = Flask(__name__)
-app.secret_key = 'collegefromhome_secret_key'
-
-# ─── DATABASE CONFIG ───────────────────────────────────
-app.config['MYSQL_HOST'] = os.environ.get('MYSQLHOST', 'localhost')
-app.config['MYSQL_USER'] = os.environ.get('MYSQLUSER', 'root')
-app.config['MYSQL_PASSWORD'] = os.environ.get('MYSQLPASSWORD', '')
-app.config['MYSQL_DB'] = os.environ.get('MYSQLDATABASE', 'collage_from_home')
-app.config['MYSQL_PORT'] = int(os.environ.get('MYSQLPORT', 3306))
-
-mysql = MySQL(app)
-
-# ─── AUTO UPDATE DATABASE ──────────────────────────────
-def init_db():
-    try:
-        with app.app_context():
-            cur = mysql.connection.cursor()
-            cur.execute("""
-                SELECT COUNT(*) FROM information_schema.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'announcements'
-                AND COLUMN_NAME = 'file_path'
-            """)
-            exists = cur.fetchone()[0]
-            if not exists:
-                cur.execute("ALTER TABLE announcements ADD COLUMN file_path VARCHAR(255) DEFAULT NULL")
-                mysql.connection.commit()
-            cur.close()
-    except Exception as e:
-        print(f"DB init error: {e}")
-
-# ─── FILE UPLOAD CONFIG ────────────────────────────────
-UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
-ALLOWED_EXTENSIONS = {
-    'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx',
-    'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp',
-    'mp4', 'avi', 'mkv', 'mov', 'wmv',
-    'mp3', 'wav', 'txt', 'csv', 'zip', 'rar'
-}
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-# ─── HOME ──────────────────────────────────────────────
-@app.route('/')
-def home():
-    return render_template('index.html')
-
-# ─── LOGIN ─────────────────────────────────────────────
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
-        cur = mysql.connection.cursor()
-        cur.execute("SELECT * FROM users WHERE email = %s AND password = %s", (email, password))
-        user = cur.fetchone()
-        cur.close()
-        if user:
-            if user[6] == 1:
-                flash('Your account has been blocked. Contact admin.', 'danger')
-                return redirect(url_for('login'))
-            if user[5] == 0 and user[4] != 'super_admin':
-                flash('Your account is pending approval from Admin.', 'warning')
-                return redirect(url_for('login'))
-            session['user_id'] = user[0]
-            session['user_name'] = user[1]
-            session['user_role'] = user[4]
-            if user[4] == 'super_admin':
-                return redirect(url_for('admin_dashboard'))
-            elif user[4] == 'teacher':
-                return redirect(url_for('teacher_dashboard'))
-            elif user[4] == 'student':
-                return redirect(url_for('student_dashboard'))
-        else:
-            flash('Invalid email or password!', 'danger')
-    return render_template('login.html')
-
-# ─── REGISTER ──────────────────────────────────────────
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        full_name = request.form['full_name']
-        email = request.form['email']
-        password = request.form['password']
-        role = request.form['role']
-        cur = mysql.connection.cursor()
-        cur.execute("SELECT * FROM users WHERE email = %s", (email,))
-        existing = cur.fetchone()
-        if existing:
-            flash('Email already registered!', 'danger')
-            return redirect(url_for('register'))
-        cur.execute(
-            "INSERT INTO users (full_name, email, password, role, is_approved) VALUES (%s, %s, %s, %s, %s)",
-            (full_name, email, password, role, 0)
-        )
-        mysql.connection.commit()
-        cur.close()
-        flash('Registration successful! Wait for admin approval.', 'success')
-        return redirect(url_for('login'))
-    return render_template('register.html')
-
-# ─── ADMIN DASHBOARD ───────────────────────────────────
-@app.route('/admin')
-def admin_dashboard():
-    if 'user_id' not in session or session['user_role'] != 'super_admin':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT COUNT(*) FROM users WHERE role = 'teacher'")
-    total_teachers = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM users WHERE role = 'student'")
-    total_students = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM users WHERE is_approved = 0 AND role != 'super_admin'")
-    pending_approvals = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM announcements")
-    total_announcements = cur.fetchone()[0]
-    cur.execute("SELECT * FROM users WHERE role != 'super_admin' ORDER BY created_at DESC")
-    all_users = cur.fetchall()
-    cur.execute("SELECT * FROM announcements ORDER BY posted_at DESC")
-    announcements = cur.fetchall()
-    cur.execute("SELECT * FROM subjects ORDER BY class_name")
-    subjects = cur.fetchall()
-    cur.execute("SELECT u.id, u.full_name, u.email FROM users u WHERE u.role = 'teacher' AND u.is_approved = 1")
-    teachers = cur.fetchall()
-    cur.execute("""
-        SELECT ta.id, u.full_name, s.subject_name, s.class_name
-        FROM teacher_assignments ta
-        JOIN users u ON ta.teacher_id = u.id
-        JOIN subjects s ON ta.subject_id = s.id
-    """)
-    assignments = cur.fetchall()
-    cur.execute("""
-        SELECT m.id, m.title, m.description, m.material_type, m.file_path,
-               m.uploaded_at, s.subject_name, u.full_name
-        FROM materials m
-        JOIN subjects s ON m.subject_id = s.id
-        JOIN users u ON m.teacher_id = u.id
-        ORDER BY m.uploaded_at DESC
-    """)
-    all_materials = cur.fetchall()
-    cur.close()
-    return render_template('admin_dashboard.html',
-        name=session['user_name'],
-        total_teachers=total_teachers,
-        total_students=total_students,
-        pending_approvals=pending_approvals,
-        total_announcements=total_announcements,
-        all_users=all_users,
-        announcements=announcements,
-        subjects=subjects,
-        teachers=teachers,
-        assignments=assignments,
-        all_materials=all_materials
-    )
-
-# ─── APPROVE USER ──────────────────────────────────────
-@app.route('/admin/approve/<int:user_id>')
-def approve_user(user_id):
-    if 'user_id' not in session or session['user_role'] != 'super_admin':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    cur.execute("UPDATE users SET is_approved = 1 WHERE id = %s", (user_id,))
-    mysql.connection.commit()
-    cur.close()
-    flash('User approved successfully!', 'success')
-    return redirect(url_for('admin_dashboard'))
-
-# ─── BLOCK / UNBLOCK USER ──────────────────────────────
-@app.route('/admin/block/<int:user_id>')
-def block_user(user_id):
-    if 'user_id' not in session or session['user_role'] != 'super_admin':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT is_blocked FROM users WHERE id = %s", (user_id,))
-    user = cur.fetchone()
-    new_status = 0 if user[0] == 1 else 1
-    cur.execute("UPDATE users SET is_blocked = %s WHERE id = %s", (new_status, user_id))
-    mysql.connection.commit()
-    cur.close()
-    flash('User block status updated!', 'success')
-    return redirect(url_for('admin_dashboard'))
-
-# ─── DELETE USER ───────────────────────────────────────
-@app.route('/admin/delete_user/<int:user_id>')
-def delete_user(user_id):
-    if 'user_id' not in session or session['user_role'] != 'super_admin':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    cur.execute("DELETE FROM teacher_assignments WHERE teacher_id = %s", (user_id,))
-    cur.execute("DELETE FROM student_enrollments WHERE student_id = %s", (user_id,))
-    cur.execute("DELETE FROM submissions WHERE student_id = %s", (user_id,))
-    cur.execute("SELECT id FROM materials WHERE teacher_id = %s", (user_id,))
-    materials = cur.fetchall()
-    for mat in materials:
-        cur.execute("DELETE FROM submissions WHERE material_id = %s", (mat[0],))
-    cur.execute("DELETE FROM materials WHERE teacher_id = %s", (user_id,))
-    cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
-    mysql.connection.commit()
-    cur.close()
-    flash('User deleted successfully!', 'success')
-    return redirect(url_for('admin_dashboard'))
-
-# ─── EDIT USER ─────────────────────────────────────────
-@app.route('/admin/edit_user/<int:user_id>', methods=['GET', 'POST'])
-def edit_user(user_id):
-    if 'user_id' not in session or session['user_role'] != 'super_admin':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    if request.method == 'POST':
-        full_name = request.form['full_name']
-        email = request.form['email']
-        password = request.form['password']
-        role = request.form['role']
-        cur.execute("""
-            UPDATE users SET full_name=%s, email=%s, password=%s, role=%s WHERE id=%s
-        """, (full_name, email, password, role, user_id))
-        mysql.connection.commit()
-        cur.close()
-        flash('User updated successfully!', 'success')
-        return redirect(url_for('admin_dashboard'))
-    cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
-    user = cur.fetchone()
-    cur.close()
-    return render_template('edit_user.html', user=user)
-
-# ─── CHANGE USER ROLE ──────────────────────────────────
-@app.route('/admin/change_role/<int:user_id>', methods=['POST'])
-def change_role(user_id):
-    if 'user_id' not in session or session['user_role'] != 'super_admin':
-        return redirect(url_for('login'))
-    new_role = request.form['new_role']
-    cur = mysql.connection.cursor()
-    cur.execute("UPDATE users SET role = %s WHERE id = %s", (new_role, user_id))
-    mysql.connection.commit()
-    cur.close()
-    flash('User role updated!', 'success')
-    return redirect(url_for('admin_dashboard'))
-
-# ─── ADD SUBJECT ───────────────────────────────────────
-@app.route('/admin/add_subject', methods=['POST'])
-def add_subject():
-    if 'user_id' not in session or session['user_role'] != 'super_admin':
-        return redirect(url_for('login'))
-    subject_name = request.form['subject_name']
-    class_name = request.form['class_name']
-    cur = mysql.connection.cursor()
-    cur.execute("INSERT INTO subjects (subject_name, class_name) VALUES (%s, %s)", (subject_name, class_name))
-    mysql.connection.commit()
-    cur.close()
-    flash('Subject added successfully!', 'success')
-    return redirect(url_for('admin_dashboard'))
-
-# ─── EDIT SUBJECT ──────────────────────────────────────
-@app.route('/admin/edit_subject/<int:subject_id>', methods=['GET', 'POST'])
-def edit_subject(subject_id):
-    if 'user_id' not in session or session['user_role'] != 'super_admin':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    if request.method == 'POST':
-        subject_name = request.form['subject_name']
-        class_name = request.form['class_name']
-        cur.execute("UPDATE subjects SET subject_name=%s, class_name=%s WHERE id=%s",
-                    (subject_name, class_name, subject_id))
-        mysql.connection.commit()
-        cur.close()
-        flash('Subject updated successfully!', 'success')
-        return redirect(url_for('admin_dashboard'))
-    cur.execute("SELECT * FROM subjects WHERE id = %s", (subject_id,))
-    subject = cur.fetchone()
-    cur.close()
-    return render_template('edit_subject.html', subject=subject)
-
-# ─── DELETE SUBJECT ────────────────────────────────────
-@app.route('/admin/delete_subject/<int:subject_id>')
-def delete_subject(subject_id):
-    if 'user_id' not in session or session['user_role'] != 'super_admin':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    cur.execute("DELETE FROM teacher_assignments WHERE subject_id = %s", (subject_id,))
-    cur.execute("DELETE FROM student_enrollments WHERE subject_id = %s", (subject_id,))
-    cur.execute("SELECT id FROM materials WHERE subject_id = %s", (subject_id,))
-    materials = cur.fetchall()
-    for mat in materials:
-        cur.execute("DELETE FROM submissions WHERE material_id = %s", (mat[0],))
-    cur.execute("DELETE FROM materials WHERE subject_id = %s", (subject_id,))
-    cur.execute("DELETE FROM subjects WHERE id = %s", (subject_id,))
-    mysql.connection.commit()
-    cur.close()
-    flash('Subject deleted successfully!', 'success')
-    return redirect(url_for('admin_dashboard'))
-
-# ─── ASSIGN SUBJECT TO TEACHER ─────────────────────────
-@app.route('/admin/assign_subject', methods=['POST'])
-def assign_subject():
-    if 'user_id' not in session or session['user_role'] != 'super_admin':
-        return redirect(url_for('login'))
-    teacher_id = request.form['teacher_id']
-    subject_id = request.form['subject_id']
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT * FROM teacher_assignments WHERE teacher_id = %s AND subject_id = %s",
-                (teacher_id, subject_id))
-    existing = cur.fetchone()
-    if existing:
-        flash('This subject is already assigned to this teacher!', 'warning')
-    else:
-        cur.execute("INSERT INTO teacher_assignments (teacher_id, subject_id) VALUES (%s, %s)",
-                    (teacher_id, subject_id))
-        mysql.connection.commit()
-        flash('Subject assigned to teacher successfully!', 'success')
-    cur.close()
-    return redirect(url_for('admin_dashboard'))
-
-# ─── REMOVE ASSIGNMENT ─────────────────────────────────
-@app.route('/admin/remove_assignment/<int:assignment_id>')
-def remove_assignment(assignment_id):
-    if 'user_id' not in session or session['user_role'] != 'super_admin':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    cur.execute("DELETE FROM teacher_assignments WHERE id = %s", (assignment_id,))
-    mysql.connection.commit()
-    cur.close()
-    flash('Assignment removed!', 'success')
-    return redirect(url_for('admin_dashboard'))
-
-# ─── POST ANNOUNCEMENT ─────────────────────────────────
-@app.route('/admin/announcement', methods=['POST'])
-def post_announcement():
-    if 'user_id' not in session or session['user_role'] != 'super_admin':
-        return redirect(url_for('login'))
-    title = request.form['title']
-    content = request.form['content']
-    category = request.form['category']
-    file_path = None
-    file = request.files.get('file')
-    if file and file.filename != '':
-        filename = secure_filename(file.filename)
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        file_path = filename
-    cur = mysql.connection.cursor()
-    cur.execute("INSERT INTO announcements (title, content, category, file_path) VALUES (%s, %s, %s, %s)",
-                (title, content, category, file_path))
-    mysql.connection.commit()
-    cur.close()
-    flash('Announcement posted successfully!', 'success')
-    return redirect(url_for('admin_dashboard'))
-
-# ─── EDIT ANNOUNCEMENT ─────────────────────────────────
-@app.route('/admin/edit_announcement/<int:ann_id>', methods=['GET', 'POST'])
-def edit_announcement(ann_id):
-    if 'user_id' not in session or session['user_role'] != 'super_admin':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    if request.method == 'POST':
-        title = request.form['title']
-        content = request.form['content']
-        category = request.form['category']
-        file = request.files.get('file')
-        cur.execute("SELECT file_path FROM announcements WHERE id = %s", (ann_id,))
-        ann = cur.fetchone()
-        file_path = ann[0] if ann else None
-        if file and file.filename != '':
-            filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            file_path = filename
-        cur.execute("""
-            UPDATE announcements SET title=%s, content=%s, category=%s, file_path=%s WHERE id=%s
-        """, (title, content, category, file_path, ann_id))
-        mysql.connection.commit()
-        cur.close()
-        flash('Announcement updated successfully!', 'success')
-        return redirect(url_for('admin_dashboard'))
-    cur.execute("SELECT * FROM announcements WHERE id = %s", (ann_id,))
-    announcement = cur.fetchone()
-    cur.close()
-    return render_template('edit_announcement.html', announcement=announcement)
-
-# ─── DELETE ANNOUNCEMENT ───────────────────────────────
-@app.route('/admin/delete_announcement/<int:ann_id>')
-def delete_announcement(ann_id):
-    if 'user_id' not in session or session['user_role'] != 'super_admin':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT file_path FROM announcements WHERE id = %s", (ann_id,))
-    ann = cur.fetchone()
-    if ann and ann[0]:
-        file_full_path = os.path.join(app.config['UPLOAD_FOLDER'], ann[0])
-        if os.path.exists(file_full_path):
-            os.remove(file_full_path)
-    cur.execute("DELETE FROM announcements WHERE id = %s", (ann_id,))
-    mysql.connection.commit()
-    cur.close()
-    flash('Announcement deleted!', 'success')
-    return redirect(url_for('admin_dashboard'))
-
-# ─── DELETE MATERIAL (ADMIN) ───────────────────────────
-@app.route('/admin/delete_material/<int:material_id>')
-def admin_delete_material(material_id):
-    if 'user_id' not in session or session['user_role'] != 'super_admin':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT file_path FROM materials WHERE id = %s", (material_id,))
-    material = cur.fetchone()
-    if material and material[0]:
-        file_full_path = os.path.join(app.config['UPLOAD_FOLDER'], material[0])
-        if os.path.exists(file_full_path):
-            os.remove(file_full_path)
-    cur.execute("DELETE FROM submissions WHERE material_id = %s", (material_id,))
-    cur.execute("DELETE FROM materials WHERE id = %s", (material_id,))
-    mysql.connection.commit()
-    cur.close()
-    flash('Material deleted!', 'success')
-    return redirect(url_for('admin_dashboard'))
-
-# ─── TEACHER DASHBOARD ─────────────────────────────────
-@app.route('/teacher')
-def teacher_dashboard():
-    if 'user_id' not in session or session['user_role'] != 'teacher':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        SELECT s.id, s.subject_name, s.class_name
-        FROM teacher_assignments ta
-        JOIN subjects s ON ta.subject_id = s.id
-        WHERE ta.teacher_id = %s
-    """, (session['user_id'],))
-    assigned_subjects = cur.fetchall()
-    cur.execute("""
-        SELECT m.id, m.title, m.material_type, m.uploaded_at, s.subject_name
-        FROM materials m
-        JOIN subjects s ON m.subject_id = s.id
-        WHERE m.teacher_id = %s
-        ORDER BY m.uploaded_at DESC
-    """, (session['user_id'],))
-    my_materials = cur.fetchall()
-    cur.execute("""
-        SELECT sub.id, u.full_name, m.title, sub.submitted_at, sub.file_path, sub.teacher_remark, sub.id
-        FROM submissions sub
-        JOIN users u ON sub.student_id = u.id
-        JOIN materials m ON sub.material_id = m.id
-        WHERE m.teacher_id = %s
-        ORDER BY sub.submitted_at DESC
-    """, (session['user_id'],))
-    submissions = cur.fetchall()
-    cur.execute("SELECT COUNT(*) FROM submissions sub JOIN materials m ON sub.material_id = m.id WHERE m.teacher_id = %s",
-                (session['user_id'],))
-    total_submissions = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM materials WHERE teacher_id = %s", (session['user_id'],))
-    total_materials = cur.fetchone()[0]
-    cur.close()
-    return render_template('teacher_dashboard.html',
-        name=session['user_name'],
-        assigned_subjects=assigned_subjects,
-        my_materials=my_materials,
-        submissions=submissions,
-        total_submissions=total_submissions,
-        total_materials=total_materials
-    )
-
-# ─── UPLOAD MATERIAL ───────────────────────────────────
-@app.route('/teacher/upload', methods=['POST'])
-def upload_material():
-    if 'user_id' not in session or session['user_role'] != 'teacher':
-        return redirect(url_for('login'))
-    title = request.form['title']
-    description = request.form['description']
-    subject_id = request.form['subject_id']
-    material_type = request.form['material_type']
-    file = request.files['file']
-    file_path = None
-    if file and file.filename != '':
-        filename = secure_filename(file.filename)
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        file_path = filename
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        INSERT INTO materials (teacher_id, subject_id, title, description, file_path, material_type)
-        VALUES (%s, %s, %s, %s, %s, %s)
-    """, (session['user_id'], subject_id, title, description, file_path, material_type))
-    mysql.connection.commit()
-    cur.close()
-    flash('Material uploaded successfully!', 'success')
-    return redirect(url_for('teacher_dashboard'))
-
-# ─── DELETE MATERIAL (TEACHER) ─────────────────────────
-@app.route('/teacher/delete_material/<int:material_id>')
-def delete_material(material_id):
-    if 'user_id' not in session or session['user_role'] != 'teacher':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT file_path FROM materials WHERE id = %s AND teacher_id = %s",
-                (material_id, session['user_id']))
-    material = cur.fetchone()
-    if material and material[0]:
-        file_full_path = os.path.join(app.config['UPLOAD_FOLDER'], material[0])
-        if os.path.exists(file_full_path):
-            os.remove(file_full_path)
-    cur.execute("DELETE FROM submissions WHERE material_id = %s", (material_id,))
-    cur.execute("DELETE FROM materials WHERE id = %s AND teacher_id = %s",
-                (material_id, session['user_id']))
-    mysql.connection.commit()
-    cur.close()
-    flash('Material deleted!', 'success')
-    return redirect(url_for('teacher_dashboard'))
-
-# ─── EDIT MATERIAL (TEACHER) ───────────────────────────
-@app.route('/teacher/edit_material/<int:material_id>', methods=['GET', 'POST'])
-def edit_material(material_id):
-    if 'user_id' not in session or session['user_role'] != 'teacher':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    if request.method == 'POST':
-        title = request.form['title']
-        description = request.form['description']
-        material_type = request.form['material_type']
-        file = request.files.get('file')
-        cur.execute("SELECT file_path FROM materials WHERE id = %s", (material_id,))
-        mat = cur.fetchone()
-        file_path = mat[0] if mat else None
-        if file and file.filename != '':
-            filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            file_path = filename
-        cur.execute("""
-            UPDATE materials SET title=%s, description=%s, material_type=%s, file_path=%s WHERE id=%s
-        """, (title, description, material_type, file_path, material_id))
-        mysql.connection.commit()
-        cur.close()
-        flash('Material updated successfully!', 'success')
-        return redirect(url_for('teacher_dashboard'))
-    cur.execute("""
-        SELECT m.*, s.subject_name FROM materials m
-        JOIN subjects s ON m.subject_id = s.id
-        WHERE m.id = %s
-    """, (material_id,))
-    material = cur.fetchone()
-    cur.close()
-    return render_template('edit_material.html', material=material)
-
-# ─── ADD REMARK ON SUBMISSION ──────────────────────────
-@app.route('/teacher/remark/<int:submission_id>', methods=['POST'])
-def add_remark(submission_id):
-    if 'user_id' not in session or session['user_role'] != 'teacher':
-        return redirect(url_for('login'))
-    remark = request.form['remark']
-    cur = mysql.connection.cursor()
-    cur.execute("UPDATE submissions SET teacher_remark = %s WHERE id = %s", (remark, submission_id))
-    mysql.connection.commit()
-    cur.close()
-    flash('Remark added successfully!', 'success')
-    return redirect(url_for('teacher_dashboard'))
-
-# ─── STUDENT DASHBOARD ─────────────────────────────────
-@app.route('/student')
-def student_dashboard():
-    if 'user_id' not in session or session['user_role'] != 'student':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT * FROM subjects ORDER BY class_name")
-    all_subjects = cur.fetchall()
-    cur.execute("""
-        SELECT s.id, s.subject_name, s.class_name
-        FROM student_enrollments se
-        JOIN subjects s ON se.subject_id = s.id
-        WHERE se.student_id = %s
-    """, (session['user_id'],))
-    enrolled_subjects = cur.fetchall()
-    enrolled_ids = [s[0] for s in enrolled_subjects]
-    materials = []
-    if enrolled_ids:
-        format_strings = ','.join(['%s'] * len(enrolled_ids))
-        cur.execute("""
-            SELECT m.id, m.title, m.description, m.material_type, m.file_path,
-                   m.uploaded_at, s.subject_name, u.full_name
-            FROM materials m
-            JOIN subjects s ON m.subject_id = s.id
-            JOIN users u ON m.teacher_id = u.id
-            WHERE m.subject_id IN (%s)
-            ORDER BY m.uploaded_at DESC
-        """ % format_strings, tuple(enrolled_ids))
-        materials = cur.fetchall()
-    cur.execute("SELECT * FROM announcements ORDER BY posted_at DESC")
-    announcements = cur.fetchall()
-    cur.execute("""
-        SELECT sub.id, m.title, sub.submitted_at, sub.teacher_remark, sub.file_path
-        FROM submissions sub
-        JOIN materials m ON sub.material_id = m.id
-        WHERE sub.student_id = %s
-        ORDER BY sub.submitted_at DESC
-    """, (session['user_id'],))
-    my_submissions = cur.fetchall()
-    cur.close()
-    return render_template('student_dashboard.html',
-        name=session['user_name'],
-        all_subjects=all_subjects,
-        enrolled_subjects=enrolled_subjects,
-        enrolled_ids=enrolled_ids,
-        materials=materials,
-        announcements=announcements,
-        my_submissions=my_submissions
-    )
-
-# ─── ENROLL IN SUBJECT ─────────────────────────────────
-@app.route('/student/enroll/<int:subject_id>')
-def enroll_subject(subject_id):
-    if 'user_id' not in session or session['user_role'] != 'student':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT * FROM student_enrollments WHERE student_id = %s AND subject_id = %s",
-                (session['user_id'], subject_id))
-    existing = cur.fetchone()
-    if existing:
-        flash('You are already enrolled in this subject!', 'warning')
-    else:
-        cur.execute("INSERT INTO student_enrollments (student_id, subject_id) VALUES (%s, %s)",
-                    (session['user_id'], subject_id))
-        mysql.connection.commit()
-        flash('Enrolled successfully!', 'success')
-    cur.close()
-    return redirect(url_for('student_dashboard'))
-
-# ─── UNENROLL FROM SUBJECT ─────────────────────────────
-@app.route('/student/unenroll/<int:subject_id>')
-def unenroll_subject(subject_id):
-    if 'user_id' not in session or session['user_role'] != 'student':
-        return redirect(url_for('login'))
-    cur = mysql.connection.cursor()
-    cur.execute("DELETE FROM student_enrollments WHERE student_id = %s AND subject_id = %s",
-                (session['user_id'], subject_id))
-    mysql.connection.commit()
-    cur.close()
-    flash('Unenrolled from subject!', 'success')
-    return redirect(url_for('student_dashboard'))
-
-# ─── SUBMIT SOLVED PAPER ───────────────────────────────
-@app.route('/student/submit/<int:material_id>', methods=['POST'])
-def submit_paper(material_id):
-    if 'user_id' not in session or session['user_role'] != 'student':
-        return redirect(url_for('login'))
-    file = request.files['file']
-    if file and file.filename != '':
-        filename = secure_filename(file.filename)
-        filename = f"student_{session['user_id']}_{filename}"
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        cur = mysql.connection.cursor()
-        cur.execute("""
-            INSERT INTO submissions (student_id, material_id, file_path)
-            VALUES (%s, %s, %s)
-        """, (session['user_id'], material_id, filename))
-        mysql.connection.commit()
-        cur.close()
-        flash('Assignment submitted successfully!', 'success')
-    else:
-        flash('Please select a file!', 'danger')
-    return redirect(url_for('student_dashboard'))
-
-# ─── LOGOUT ────────────────────────────────────────────
-@app.route('/logout')
-def logout():
-    session.clear()
-    flash('Logged out successfully!', 'success')
-    return redirect(url_for('login'))
-
-if __name__ == '__main__':
-    with app.app_context():
-        init_db()
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
-
+# ─── REPORTS & EXPORT IMPORTS ──────────────────────────
 import csv
 import io
 from flask import make_response
@@ -682,38 +9,50 @@ from datetime import datetime
 def admin_reports():
     if 'user_id' not in session or session['user_role'] != 'super_admin':
         return redirect(url_for('login'))
+
     cur = mysql.connection.cursor()
 
-    # Total counts
-    cur.execute("SELECT COUNT(*) FROM users WHERE role = 'teacher'")
+    # Dashboard Counts
+    cur.execute("SELECT COUNT(*) FROM users WHERE role='teacher'")
     total_teachers = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM users WHERE role = 'student'")
+
+    cur.execute("SELECT COUNT(*) FROM users WHERE role='student'")
     total_students = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM users WHERE is_approved = 0 AND role != 'super_admin'")
+
+    cur.execute("SELECT COUNT(*) FROM users WHERE is_approved=0 AND role!='super_admin'")
     pending_users = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM users WHERE is_blocked = 1")
+
+    cur.execute("SELECT COUNT(*) FROM users WHERE is_blocked=1")
     blocked_users = cur.fetchone()[0]
+
     cur.execute("SELECT COUNT(*) FROM materials")
     total_materials = cur.fetchone()[0]
+
     cur.execute("SELECT COUNT(*) FROM submissions")
     total_submissions = cur.fetchone()[0]
+
     cur.execute("SELECT COUNT(*) FROM announcements")
     total_announcements = cur.fetchone()[0]
+
     cur.execute("SELECT COUNT(*) FROM subjects")
     total_subjects = cur.fetchone()[0]
 
-    # All registrations
+    # Registrations
     cur.execute("""
-        SELECT id, full_name, email, role, is_approved, is_blocked, created_at
-        FROM users WHERE role != 'super_admin'
+        SELECT id, full_name, email, role,
+               is_approved, is_blocked, created_at
+        FROM users
+        WHERE role != 'super_admin'
         ORDER BY created_at DESC
     """)
     all_registrations = cur.fetchall()
 
-    # All uploaded materials
+    # Uploaded Materials
     cur.execute("""
-        SELECT m.id, m.title, m.material_type, m.file_path,
-               m.uploaded_at, s.subject_name, s.class_name, u.full_name
+        SELECT m.id, m.title, m.material_type,
+               m.file_path, m.uploaded_at,
+               s.subject_name, s.class_name,
+               u.full_name
         FROM materials m
         JOIN subjects s ON m.subject_id = s.id
         JOIN users u ON m.teacher_id = u.id
@@ -721,10 +60,15 @@ def admin_reports():
     """)
     all_uploads = cur.fetchall()
 
-    # All submissions
+    # Submissions
     cur.execute("""
-        SELECT sub.id, u.full_name, m.title, s.subject_name,
-               sub.submitted_at, sub.teacher_remark, sub.file_path
+        SELECT sub.id,
+               u.full_name,
+               m.title,
+               s.subject_name,
+               sub.submitted_at,
+               sub.teacher_remark,
+               sub.file_path
         FROM submissions sub
         JOIN users u ON sub.student_id = u.id
         JOIN materials m ON sub.material_id = m.id
@@ -733,13 +77,19 @@ def admin_reports():
     """)
     all_submissions = cur.fetchall()
 
-    # All announcements
-    cur.execute("SELECT * FROM announcements ORDER BY posted_at DESC")
+    # Announcements
+    cur.execute("""
+        SELECT *
+        FROM announcements
+        ORDER BY posted_at DESC
+    """)
     all_announcements = cur.fetchall()
 
-    # Materials per subject
+    # Subject Stats
     cur.execute("""
-        SELECT s.subject_name, s.class_name, COUNT(m.id) as total
+        SELECT s.subject_name,
+               s.class_name,
+               COUNT(m.id) AS total
         FROM subjects s
         LEFT JOIN materials m ON s.id = m.subject_id
         GROUP BY s.id
@@ -747,30 +97,36 @@ def admin_reports():
     """)
     subject_stats = cur.fetchall()
 
-    # Submissions per student
+    # Student Stats
     cur.execute("""
-        SELECT u.full_name, u.email, COUNT(sub.id) as total
+        SELECT u.full_name,
+               u.email,
+               COUNT(sub.id) AS total
         FROM users u
         LEFT JOIN submissions sub ON u.id = sub.student_id
-        WHERE u.role = 'student'
+        WHERE u.role='student'
         GROUP BY u.id
         ORDER BY total DESC
     """)
     student_stats = cur.fetchall()
 
-    # Uploads per teacher
+    # Teacher Stats
     cur.execute("""
-        SELECT u.full_name, u.email, COUNT(m.id) as total
+        SELECT u.full_name,
+               u.email,
+               COUNT(m.id) AS total
         FROM users u
         LEFT JOIN materials m ON u.id = m.teacher_id
-        WHERE u.role = 'teacher'
+        WHERE u.role='teacher'
         GROUP BY u.id
         ORDER BY total DESC
     """)
     teacher_stats = cur.fetchall()
 
     cur.close()
-    return render_template('reports.html',
+
+    return render_template(
+        'reports.html',
         total_teachers=total_teachers,
         total_students=total_students,
         pending_users=pending_users,
@@ -789,184 +145,359 @@ def admin_reports():
         generated_at=datetime.now().strftime('%d %b %Y %I:%M %p')
     )
 
-# ─── EXPORT REGISTRATIONS TO CSV/EXCEL ─────────────────
+# ─── EXPORT REGISTRATIONS ──────────────────────────────
 @app.route('/admin/export/registrations')
 def export_registrations():
+
     if 'user_id' not in session or session['user_role'] != 'super_admin':
         return redirect(url_for('login'))
+
     cur = mysql.connection.cursor()
+
     cur.execute("""
-        SELECT id, full_name, email, role, 
-               CASE WHEN is_approved = 1 THEN 'Approved' ELSE 'Pending' END as status,
-               CASE WHEN is_blocked = 1 THEN 'Blocked' ELSE 'Active' END as blocked,
+        SELECT id,
+               full_name,
+               email,
+               role,
+               CASE
+                    WHEN is_approved=1
+                    THEN 'Approved'
+                    ELSE 'Pending'
+               END,
+               CASE
+                    WHEN is_blocked=1
+                    THEN 'Blocked'
+                    ELSE 'Active'
+               END,
                created_at
-        FROM users WHERE role != 'super_admin'
+        FROM users
+        WHERE role!='super_admin'
         ORDER BY created_at DESC
     """)
+
     data = cur.fetchall()
     cur.close()
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['ID', 'Full Name', 'Email', 'Role', 'Approval Status', 'Block Status', 'Registered On'])
+
+    writer.writerow([
+        'ID',
+        'Full Name',
+        'Email',
+        'Role',
+        'Approval Status',
+        'Block Status',
+        'Registered On'
+    ])
+
     for row in data:
         writer.writerow(row)
 
     response = make_response(output.getvalue())
     response.headers['Content-Disposition'] = 'attachment; filename=registrations_report.csv'
     response.headers['Content-type'] = 'text/csv'
+
     return response
 
-# ─── EXPORT UPLOADS TO CSV/EXCEL ───────────────────────
+# ─── EXPORT UPLOADS ────────────────────────────────────
 @app.route('/admin/export/uploads')
 def export_uploads():
+
     if 'user_id' not in session or session['user_role'] != 'super_admin':
         return redirect(url_for('login'))
+
     cur = mysql.connection.cursor()
+
     cur.execute("""
-        SELECT m.id, m.title, m.material_type, m.file_path,
-               s.subject_name, s.class_name, u.full_name, m.uploaded_at
+        SELECT m.id,
+               m.title,
+               m.material_type,
+               m.file_path,
+               s.subject_name,
+               s.class_name,
+               u.full_name,
+               m.uploaded_at
         FROM materials m
-        JOIN subjects s ON m.subject_id = s.id
-        JOIN users u ON m.teacher_id = u.id
+        JOIN subjects s ON m.subject_id=s.id
+        JOIN users u ON m.teacher_id=u.id
         ORDER BY m.uploaded_at DESC
     """)
+
     data = cur.fetchall()
     cur.close()
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['ID', 'Title', 'Type', 'File Name', 'Subject', 'Class', 'Uploaded By', 'Uploaded On'])
+
+    writer.writerow([
+        'ID',
+        'Title',
+        'Type',
+        'File Name',
+        'Subject',
+        'Class',
+        'Uploaded By',
+        'Uploaded On'
+    ])
+
     for row in data:
         writer.writerow(row)
 
     response = make_response(output.getvalue())
     response.headers['Content-Disposition'] = 'attachment; filename=uploads_report.csv'
     response.headers['Content-type'] = 'text/csv'
+
     return response
 
-# ─── EXPORT SUBMISSIONS TO CSV/EXCEL ───────────────────
+# ─── EXPORT SUBMISSIONS ────────────────────────────────
 @app.route('/admin/export/submissions')
 def export_submissions():
+
     if 'user_id' not in session or session['user_role'] != 'super_admin':
         return redirect(url_for('login'))
+
     cur = mysql.connection.cursor()
+
     cur.execute("""
-        SELECT sub.id, u.full_name, m.title, s.subject_name,
+        SELECT sub.id,
+               u.full_name,
+               m.title,
+               s.subject_name,
                sub.submitted_at,
-               CASE WHEN sub.teacher_remark IS NOT NULL THEN sub.teacher_remark ELSE 'Pending Review' END
+               CASE
+                    WHEN sub.teacher_remark IS NOT NULL
+                    THEN sub.teacher_remark
+                    ELSE 'Pending Review'
+               END
         FROM submissions sub
-        JOIN users u ON sub.student_id = u.id
-        JOIN materials m ON sub.material_id = m.id
-        JOIN subjects s ON m.subject_id = s.id
+        JOIN users u ON sub.student_id=u.id
+        JOIN materials m ON sub.material_id=m.id
+        JOIN subjects s ON m.subject_id=s.id
         ORDER BY sub.submitted_at DESC
     """)
+
     data = cur.fetchall()
     cur.close()
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['ID', 'Student Name', 'Assignment Title', 'Subject', 'Submitted On', 'Teacher Remark'])
+
+    writer.writerow([
+        'ID',
+        'Student Name',
+        'Assignment Title',
+        'Subject',
+        'Submitted On',
+        'Teacher Remark'
+    ])
+
     for row in data:
         writer.writerow(row)
 
     response = make_response(output.getvalue())
     response.headers['Content-Disposition'] = 'attachment; filename=submissions_report.csv'
     response.headers['Content-type'] = 'text/csv'
+
     return response
 
-# ─── EXPORT ANNOUNCEMENTS TO CSV/EXCEL ─────────────────
+# ─── EXPORT ANNOUNCEMENTS ──────────────────────────────
 @app.route('/admin/export/announcements')
 def export_announcements():
+
     if 'user_id' not in session or session['user_role'] != 'super_admin':
         return redirect(url_for('login'))
+
     cur = mysql.connection.cursor()
-    cur.execute("SELECT id, title, content, category, posted_at FROM announcements ORDER BY posted_at DESC")
+
+    cur.execute("""
+        SELECT id,
+               title,
+               content,
+               category,
+               posted_at
+        FROM announcements
+        ORDER BY posted_at DESC
+    """)
+
     data = cur.fetchall()
     cur.close()
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['ID', 'Title', 'Content', 'Category', 'Posted On'])
+
+    writer.writerow([
+        'ID',
+        'Title',
+        'Content',
+        'Category',
+        'Posted On'
+    ])
+
     for row in data:
         writer.writerow(row)
 
     response = make_response(output.getvalue())
     response.headers['Content-Disposition'] = 'attachment; filename=announcements_report.csv'
     response.headers['Content-type'] = 'text/csv'
+
     return response
 
-# ─── EXPORT FULL REPORT TO CSV/EXCEL ───────────────────
+# ─── EXPORT FULL REPORT ────────────────────────────────
 @app.route('/admin/export/full')
 def export_full():
+
     if 'user_id' not in session or session['user_role'] != 'super_admin':
         return redirect(url_for('login'))
+
     cur = mysql.connection.cursor()
 
     output = io.StringIO()
     writer = csv.writer(output)
 
-    # Section 1: Summary
     writer.writerow(['=== COLLEGE FROM HOME - FULL REPORT ==='])
-    writer.writerow(['Generated On', datetime.now().strftime('%d %b %Y %I:%M %p')])
+    writer.writerow([
+        'Generated On',
+        datetime.now().strftime('%d %b %Y %I:%M %p')
+    ])
     writer.writerow([])
 
-    # Section 2: Registrations
+    # Registrations
     writer.writerow(['=== USER REGISTRATIONS ==='])
-    writer.writerow(['ID', 'Full Name', 'Email', 'Role', 'Status', 'Blocked', 'Registered On'])
+
+    writer.writerow([
+        'ID',
+        'Full Name',
+        'Email',
+        'Role',
+        'Status',
+        'Blocked',
+        'Registered On'
+    ])
+
     cur.execute("""
-        SELECT id, full_name, email, role,
-               CASE WHEN is_approved=1 THEN 'Approved' ELSE 'Pending' END,
-               CASE WHEN is_blocked=1 THEN 'Blocked' ELSE 'Active' END,
+        SELECT id,
+               full_name,
+               email,
+               role,
+               CASE
+                    WHEN is_approved=1
+                    THEN 'Approved'
+                    ELSE 'Pending'
+               END,
+               CASE
+                    WHEN is_blocked=1
+                    THEN 'Blocked'
+                    ELSE 'Active'
+               END,
                created_at
-        FROM users WHERE role != 'super_admin' ORDER BY created_at DESC
+        FROM users
+        WHERE role!='super_admin'
+        ORDER BY created_at DESC
     """)
+
     for row in cur.fetchall():
         writer.writerow(row)
+
     writer.writerow([])
 
-    # Section 3: Uploads
+    # Uploads
     writer.writerow(['=== UPLOADED MATERIALS ==='])
-    writer.writerow(['ID', 'Title', 'Type', 'File', 'Subject', 'Class', 'Teacher', 'Date'])
+
+    writer.writerow([
+        'ID',
+        'Title',
+        'Type',
+        'File',
+        'Subject',
+        'Class',
+        'Teacher',
+        'Date'
+    ])
+
     cur.execute("""
-        SELECT m.id, m.title, m.material_type, m.file_path,
-               s.subject_name, s.class_name, u.full_name, m.uploaded_at
+        SELECT m.id,
+               m.title,
+               m.material_type,
+               m.file_path,
+               s.subject_name,
+               s.class_name,
+               u.full_name,
+               m.uploaded_at
         FROM materials m
-        JOIN subjects s ON m.subject_id = s.id
-        JOIN users u ON m.teacher_id = u.id
+        JOIN subjects s ON m.subject_id=s.id
+        JOIN users u ON m.teacher_id=u.id
         ORDER BY m.uploaded_at DESC
     """)
+
     for row in cur.fetchall():
         writer.writerow(row)
+
     writer.writerow([])
 
-    # Section 4: Submissions
+    # Submissions
     writer.writerow(['=== STUDENT SUBMISSIONS ==='])
-    writer.writerow(['ID', 'Student', 'Assignment', 'Subject', 'Date', 'Remark'])
+
+    writer.writerow([
+        'ID',
+        'Student',
+        'Assignment',
+        'Subject',
+        'Date',
+        'Remark'
+    ])
+
     cur.execute("""
-        SELECT sub.id, u.full_name, m.title, s.subject_name,
+        SELECT sub.id,
+               u.full_name,
+               m.title,
+               s.subject_name,
                sub.submitted_at,
-               CASE WHEN sub.teacher_remark IS NOT NULL THEN sub.teacher_remark ELSE 'Pending' END
+               CASE
+                    WHEN sub.teacher_remark IS NOT NULL
+                    THEN sub.teacher_remark
+                    ELSE 'Pending'
+               END
         FROM submissions sub
-        JOIN users u ON sub.student_id = u.id
-        JOIN materials m ON sub.material_id = m.id
-        JOIN subjects s ON m.subject_id = s.id
+        JOIN users u ON sub.student_id=u.id
+        JOIN materials m ON sub.material_id=m.id
+        JOIN subjects s ON m.subject_id=s.id
         ORDER BY sub.submitted_at DESC
     """)
+
     for row in cur.fetchall():
         writer.writerow(row)
+
     writer.writerow([])
 
-    # Section 5: Announcements
+    # Announcements
     writer.writerow(['=== ANNOUNCEMENTS ==='])
-    writer.writerow(['ID', 'Title', 'Category', 'Posted On'])
-    cur.execute("SELECT id, title, category, posted_at FROM announcements ORDER BY posted_at DESC")
+
+    writer.writerow([
+        'ID',
+        'Title',
+        'Category',
+        'Posted On'
+    ])
+
+    cur.execute("""
+        SELECT id,
+               title,
+               category,
+               posted_at
+        FROM announcements
+        ORDER BY posted_at DESC
+    """)
+
     for row in cur.fetchall():
         writer.writerow(row)
 
     cur.close()
 
     response = make_response(output.getvalue())
+
     response.headers['Content-Disposition'] = 'attachment; filename=full_report.csv'
+
     response.headers['Content-type'] = 'text/csv'
+
     return response
