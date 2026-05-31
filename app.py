@@ -5,6 +5,7 @@ import csv
 import io
 from werkzeug.utils import secure_filename
 from datetime import datetime
+import anthropic
 
 app = Flask(__name__)
 app.secret_key = 'collegefromhome_secret_key'
@@ -420,6 +421,90 @@ def admin_delete_material(material_id):
     flash('Material deleted!', 'success')
     return redirect(url_for('admin_dashboard'))
 
+# ─── AI ASSISTANT ──────────────────────────────────────
+@app.route('/ai/ask', methods=['POST'])
+def ai_ask():
+    if 'user_id' not in session:
+        return {'error': 'Not logged in'}, 401
+
+    question = request.form.get('question', '')
+    subject = request.form.get('subject', 'General')
+    chat_history = request.form.get('history', '[]')
+
+    import json
+    try:
+        history = json.loads(chat_history)
+    except:
+        history = []
+
+    if not question:
+        return {'error': 'No question provided'}, 400
+
+    try:
+        client = anthropic.Anthropic(
+            api_key=os.environ.get('ANTHROPIC_API_KEY', '')
+        )
+
+        messages = []
+        for msg in history[-10:]:
+            messages.append({
+                "role": msg['role'],
+                "content": msg['content']
+            })
+        messages.append({
+            "role": "user",
+            "content": question
+        })
+
+        response = client.messages.create(
+            model="claude-opus-4-5",
+            max_tokens=1024,
+            system=f"""You are a helpful educational AI assistant for college students and teachers at College From Home portal.
+
+Current subject context: {subject}
+User role: {session.get('user_role', 'student')}
+User name: {session.get('user_name', 'User')}
+
+Your job is to:
+1. Answer questions clearly and in simple English
+2. ALWAYS break answers into numbered steps when explaining a process
+3. Give examples wherever possible
+4. Use simple language that students can understand easily
+5. If a math or science problem, show full working step by step
+6. End every answer with a short summary
+7. If asked in context of a subject, relate your answer to that subject
+
+Format your answers like:
+- Use numbered steps (1. 2. 3.)
+- Use bullet points for lists
+- Give examples with "Example:" prefix
+- End with "Summary:" section
+
+Be encouraging and supportive to students!""",
+            messages=messages
+        )
+
+        answer = response.content[0].text
+        return {
+            'answer': answer,
+            'status': 'success'
+        }
+
+    except Exception as e:
+        return {
+            'error': str(e),
+            'status': 'error'
+        }, 500
+        
+        # ─── AI ASSISTANT PAGE ─────────────────────────────────
+@app.route('/ai')
+def ai_assistant():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    if session['user_role'] not in ['student', 'teacher']:
+        return redirect(url_for('login'))
+    return render_template('ai_assistant.html', name=session['user_name'])
+        
 # ─── REPORTS DASHBOARD ─────────────────────────────────
 @app.route('/admin/reports')
 def admin_reports():

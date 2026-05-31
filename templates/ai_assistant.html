@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Assistant - College From Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .ai-container { display: flex; flex-direction: column; height: calc(100vh - 80px); }
+        .ai-header { background: linear-gradient(135deg, #1a1a2e, #533483); color: white; padding: 15px 20px; border-radius: 12px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .ai-header h2 { margin: 0; font-size: 18px; }
+        .ai-header small { opacity: 0.8; font-size: 12px; }
+        .subject-bar { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .subject-btn { padding: 6px 14px; border-radius: 20px; border: 2px solid #0f3460; background: white; color: #0f3460; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+        .subject-btn.active { background: #0f3460; color: white; }
+        .subject-btn:hover { background: #0f3460; color: white; }
+        .chat-box { flex: 1; overflow-y: auto; padding: 15px; background: white; border-radius: 12px; border: 2px solid #f0f2f5; margin-bottom: 15px; min-height: 400px; max-height: 500px; }
+        .message { margin-bottom: 18px; display: flex; gap: 10px; align-items: flex-start; }
+        .message.user { flex-direction: row-reverse; }
+        .message-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+        .message.ai .message-avatar { background: linear-gradient(135deg, #533483, #0f3460); }
+        .message.user .message-avatar { background: linear-gradient(135deg, #0f3460, #533483); }
+        .message-content { max-width: 80%; padding: 12px 16px; border-radius: 12px; font-size: 14px; line-height: 1.7; }
+        .message.ai .message-content { background: #f8f0ff; color: #1a1a2e; border-bottom-left-radius: 4px; }
+        .message.user .message-content { background: linear-gradient(135deg, #0f3460, #533483); color: white; border-bottom-right-radius: 4px; }
+        .message-content pre { white-space: pre-wrap; font-family: inherit; margin: 0; }
+        .message-content ol, .message-content ul { padding-left: 20px; margin: 8px 0; }
+        .message-content li { margin-bottom: 4px; }
+        .message-content strong { font-weight: 700; }
+        .input-area { display: flex; gap: 10px; }
+        .input-area textarea { flex: 1; padding: 12px 15px; border: 2px solid #eee; border-radius: 12px; font-size: 14px; font-family: 'Segoe UI', sans-serif; resize: none; height: 52px; outline: none; transition: border 0.2s; }
+        .input-area textarea:focus { border-color: #533483; }
+        .send-btn { padding: 12px 20px; background: linear-gradient(135deg, #0f3460, #533483); color: white; border: none; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: opacity 0.2s; white-space: nowrap; }
+        .send-btn:hover { opacity: 0.9; }
+        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .typing-indicator { display: none; padding: 12px 16px; background: #f8f0ff; border-radius: 12px; border-bottom-left-radius: 4px; width: fit-content; }
+        .typing-indicator span { display: inline-block; width: 8px; height: 8px; background: #533483; border-radius: 50%; margin: 0 2px; animation: bounce 1.2s infinite; }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-8px); } }
+        .welcome-msg { text-align: center; padding: 30px 20px; color: #888; }
+        .welcome-msg .ai-icon { font-size: 60px; margin-bottom: 15px; }
+        .welcome-msg h3 { color: #1a1a2e; margin-bottom: 10px; }
+        .suggested-questions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 15px; }
+        .suggested-q { padding: 8px 14px; background: #f0f2f5; border-radius: 20px; font-size: 13px; cursor: pointer; border: none; color: #0f3460; font-weight: 500; transition: background 0.2s; }
+        .suggested-q:hover { background: #e0e5ff; }
+        .clear-btn { padding: 6px 14px; background: #fde8e8; color: #e74c3c; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .clear-btn:hover { background: #fcc; }
+        @media (max-width: 768px) {
+            .ai-container { height: auto; }
+            .chat-box { min-height: 300px; max-height: 350px; }
+            .message-content { max-width: 90%; font-size: 13px; }
+        }
+    </style>
+</head>
+<body class="dash-body">
+
+<div class="sidebar">
+    <div class="sidebar-logo">🎓 CFH</div>
+    <nav>
+        {% if session.user_role == 'student' %}
+        <a href="/student" class="nav-link">🎒 Dashboard</a>
+        {% else %}
+        <a href="/teacher" class="nav-link">📚 Dashboard</a>
+        {% endif %}
+        <a href="/ai" class="nav-link active">🤖 AI Assistant</a>
+    </nav>
+    <a href="/logout" class="logout-btn">🚪 Logout</a>
+</div>
+
+<div class="main-content">
+    <div class="ai-container">
+
+        <!-- HEADER -->
+        <div class="ai-header">
+            <div>
+                <h2>🤖 AI Study Assistant</h2>
+                <small>Powered by Claude AI — Ask any question, get step-by-step answers!</small>
+            </div>
+            <button class="clear-btn" onclick="clearChat()">🗑️ Clear Chat</button>
+        </div>
+
+        <!-- SUBJECT SELECTOR -->
+        <div class="subject-bar">
+            <span style="font-size:13px; font-weight:600; color:#555; align-self:center;">Subject:</span>
+            <button class="subject-btn active" onclick="setSubject(this, 'General')">📌 General</button>
+            <button class="subject-btn" onclick="setSubject(this, 'Mathematics')">📐 Mathematics</button>
+            <button class="subject-btn" onclick="setSubject(this, 'Computer Science')">💻 Computer Science</button>
+            <button class="subject-btn" onclick="setSubject(this, 'Physics')">⚛️ Physics</button>
+            <button class="subject-btn" onclick="setSubject(this, 'Chemistry')">🧪 Chemistry</button>
+            <button class="subject-btn" onclick="setSubject(this, 'English')">📖 English</button>
+        </div>
+
+        <!-- CHAT BOX -->
+        <div class="chat-box" id="chatBox">
+            <div class="welcome-msg" id="welcomeMsg">
+                <div class="ai-icon">🤖</div>
+                <h3>Hello {{ name }}! I'm your AI Study Assistant</h3>
+                <p>Ask me any question and I'll give you a clear, step-by-step answer!</p>
+                <div class="suggested-questions">
+                    <button class="suggested-q" onclick="askSuggested(this)">What is Python?</button>
+                    <button class="suggested-q" onclick="askSuggested(this)">Explain OOP concepts</button>
+                    <button class="suggested-q" onclick="askSuggested(this)">How does a database work?</button>
+                    <button class="suggested-q" onclick="askSuggested(this)">What is normalization?</button>
+                    <button class="suggested-q" onclick="askSuggested(this)">Explain sorting algorithms</button>
+                    <button class="suggested-q" onclick="askSuggested(this)">What is a primary key?</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TYPING INDICATOR -->
+        <div id="typingIndicator" style="display:none; margin-bottom:10px; padding-left:46px;">
+            <div class="typing-indicator" style="display:flex;">
+                <span></span><span></span><span></span>
+            </div>
+        </div>
+
+        <!-- INPUT AREA -->
+        <div class="input-area">
+            <textarea id="questionInput"
+                placeholder="Type your question here... (Press Enter to send, Shift+Enter for new line)"
+                onkeydown="handleKeyDown(event)"></textarea>
+            <button class="send-btn" id="sendBtn" onclick="sendQuestion()">
+                📤 Ask AI
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    let chatHistory = [];
+    let currentSubject = 'General';
+    let isLoading = false;
+
+    function setSubject(btn, subject) {
+        document.querySelectorAll('.subject-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentSubject = subject;
+    }
+
+    function handleKeyDown(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendQuestion();
+        }
+    }
+
+    function askSuggested(btn) {
+        document.getElementById('questionInput').value = btn.textContent;
+        sendQuestion();
+    }
+
+    function formatAnswer(text) {
+        text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+        text = text.replace(/`(.*?)`/g, '<code style="background:#f0f0f0;padding:2px 6px;border-radius:4px;font-family:monospace;">$1</code>');
+        text = text.replace(/^### (.*$)/gm, '<h4 style="margin:10px 0 5px;color:#533483;">$1</h4>');
+        text = text.replace(/^## (.*$)/gm, '<h3 style="margin:10px 0 5px;color:#0f3460;">$1</h3>');
+        text = text.replace(/^# (.*$)/gm, '<h2 style="margin:10px 0 5px;color:#1a1a2e;">$1</h2>');
+        const lines = text.split('\n');
+        let result = '';
+        let inOL = false;
+        let inUL = false;
+        for (let line of lines) {
+            if (/^\d+\.\s/.test(line)) {
+                if (!inOL) { result += '<ol style="padding-left:20px;margin:8px 0;">'; inOL = true; }
+                if (inUL) { result += '</ul>'; inUL = false; }
+                result += '<li style="margin-bottom:6px;">' + line.replace(/^\d+\.\s/, '') + '</li>';
+            } else if (/^[-•]\s/.test(line)) {
+                if (!inUL) { result += '<ul style="padding-left:20px;margin:8px 0;">'; inUL = true; }
+                if (inOL) { result += '</ol>'; inOL = false; }
+                result += '<li style="margin-bottom:4px;">' + line.replace(/^[-•]\s/, '') + '</li>';
+            } else {
+                if (inOL) { result += '</ol>'; inOL = false; }
+                if (inUL) { result += '</ul>'; inUL = false; }
+                if (line.trim() === '') { result += '<br>'; }
+                else { result += '<p style="margin:4px 0;">' + line + '</p>'; }
+            }
+        }
+        if (inOL) result += '</ol>';
+        if (inUL) result += '</ul>';
+        return result;
+    }
+
+    function addMessage(role, content) {
+        const welcomeMsg = document.getElementById('welcomeMsg');
+        if (welcomeMsg) welcomeMsg.remove();
+
+        const chatBox = document.getElementById('chatBox');
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message ' + role;
+
+        const avatar = document.createElement('div');
+        avatar.className = 'message-avatar';
+        avatar.textContent = role === 'ai' ? '🤖' : '👤';
+
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+
+        if (role === 'ai') {
+            contentDiv.innerHTML = formatAnswer(content);
+        } else {
+            contentDiv.textContent = content;
+        }
+
+        msgDiv.appendChild(avatar);
+        msgDiv.appendChild(contentDiv);
+        chatBox.appendChild(msgDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    async function sendQuestion() {
+        if (isLoading) return;
+        const input = document.getElementById('questionInput');
+        const question = input.value.trim();
+        if (!question) return;
+
+        isLoading = true;
+        document.getElementById('sendBtn').disabled = true;
+        input.value = '';
+
+        addMessage('user', question);
+
+        document.getElementById('typingIndicator').style.display = 'block';
+        document.getElementById('chatBox').scrollTop = document.getElementById('chatBox').scrollHeight;
+
+        const formData = new FormData();
+        formData.append('question', question);
+        formData.append('subject', currentSubject);
+        formData.append('history', JSON.stringify(chatHistory));
+
+        try {
+            const response = await fetch('/ai/ask', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+
+            document.getElementById('typingIndicator').style.display = 'none';
+
+            if (data.status === 'success') {
+                addMessage('ai', data.answer);
+                chatHistory.push({ role: 'user', content: question });
+                chatHistory.push({ role: 'assistant', content: data.answer });
+                if (chatHistory.length > 20) {
+                    chatHistory = chatHistory.slice(-20);
+                }
+            } else {
+                addMessage('ai', '❌ Sorry, I encountered an error: ' + (data.error || 'Unknown error. Please try again.'));
+            }
+        } catch (error) {
+            document.getElementById('typingIndicator').style.display = 'none';
+            addMessage('ai', '❌ Connection error. Please check your internet and try again.');
+        }
+
+        isLoading = false;
+        document.getElementById('sendBtn').disabled = false;
+        input.focus();
+    }
+
+    function clearChat() {
+        if (confirm('Clear entire chat history?')) {
+            chatHistory = [];
+            const chatBox = document.getElementById('chatBox');
+            chatBox.innerHTML = `
+                <div class="welcome-msg" id="welcomeMsg">
+                    <div class="ai-icon">🤖</div>
+                    <h3>Chat cleared! Ask me anything!</h3>
+                    <p>I'm ready to help you with step-by-step answers.</p>
+                    <div class="suggested-questions">
+                        <button class="suggested-q" onclick="askSuggested(this)">What is Python?</button>
+                        <button class="suggested-q" onclick="askSuggested(this)">Explain OOP concepts</button>
+                        <button class="suggested-q" onclick="askSuggested(this)">How does a database work?</button>
+                        <button class="suggested-q" onclick="askSuggested(this)">What is normalization?</button>
+                    </div>
+                </div>`;
+        }
+    }
+
+    document.getElementById('questionInput').focus();
+</script>
+
+</body>
+</html>

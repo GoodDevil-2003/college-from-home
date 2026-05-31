@@ -3,3 +3,9 @@ flask-mysqldb
 werkzeug
 gunicorn
 mysqlclient
+flask
+flask-mysqldb
+werkzeug
+gunicorn
+mysqlclient
+anthropic
