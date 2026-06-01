@@ -6,7 +6,8 @@ import io
 import json
 from werkzeug.utils import secure_filename
 from datetime import datetime
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 app = Flask(__name__)
 app.secret_key = 'collegefromhome_secret_key'
@@ -449,7 +450,6 @@ def ai_ask():
         return {'error': 'No question'}, 400
 
     api_key = os.environ.get('GEMINI_API_KEY', '')
-
     if not api_key:
         return {
             'error': 'API key not configured. Please contact admin.',
@@ -457,11 +457,9 @@ def ai_ask():
         }, 500
 
     try:
-        genai.configure(api_key=api_key)
+        client = genai.Client(api_key=api_key)
 
-        model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash',
-            system_instruction=f"""You are a helpful educational AI assistant for college students and teachers at College From Home portal.
+        system_prompt = f"""You are a helpful educational AI assistant for college students and teachers at College From Home portal.
 
 Current subject: {subject}
 User role: {session.get('user_role', 'student')}
@@ -476,19 +474,35 @@ Your rules:
 6. Be encouraging and supportive
 7. If code is needed show it clearly
 8. Keep answers focused and easy to understand for college students"""
+
+        # Build message history
+        messages = []
+        for msg in history[-10:]:
+            messages.append(
+                types.Content(
+                    role='user' if msg['role'] == 'user' else 'model',
+                    parts=[types.Part(text=msg['content'])]
+                )
+            )
+        # Add current question
+        messages.append(
+            types.Content(
+                role='user',
+                parts=[types.Part(text=question)]
+            )
         )
 
-        gemini_history = []
-        for msg in history[-10:]:
-            gemini_history.append({
-                'role': 'user' if msg['role'] == 'user' else 'model',
-                'parts': [msg['content']]
-            })
+        response = client.models.generate_content(
+            model='gemini-2.0-flash-lite',
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                max_output_tokens=1024,
+                temperature=0.7,
+            ),
+            contents=messages
+        )
 
-        chat = model.start_chat(history=gemini_history)
-        response = chat.send_message(question)
         answer = response.text
-
         return {
             'answer': answer,
             'status': 'success'
@@ -499,8 +513,7 @@ Your rules:
             'error': str(e),
             'status': 'error'
         }, 500
-        
-        
+                
 # ─── REPORTS DASHBOARD ─────────────────────────────────
 @app.route('/admin/reports')
 def admin_reports():
@@ -1007,3 +1020,18 @@ if __name__ == '__main__':
         init_db()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+    
+    # ─── CHECK AVAILABLE MODELS ────────────────────────────
+@app.route('/check_models')
+def check_models():
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=os.environ.get('GEMINI_API_KEY', ''))
+        models = genai.list_models()
+        model_list = []
+        for m in models:
+            if 'generateContent' in m.supported_generation_methods:
+                model_list.append(m.name)
+        return {'models': model_list}
+    except Exception as e:
+        return {'error': str(e)}
