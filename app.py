@@ -5,7 +5,8 @@ import csv
 import io
 from werkzeug.utils import secure_filename
 from datetime import datetime
-import anthropic
+import google.generativeai as genai
+import json
 
 app = Flask(__name__)
 app.secret_key = 'collegefromhome_secret_key'
@@ -420,8 +421,16 @@ def admin_delete_material(material_id):
     cur.close()
     flash('Material deleted!', 'success')
     return redirect(url_for('admin_dashboard'))
+# ─── AI ASSISTANT PAGE ─────────────────────────────────
+@app.route('/ai')
+def ai_assistant():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    if session['user_role'] not in ['student', 'teacher']:
+        return redirect(url_for('login'))
+    return render_template('ai_assistant.html', name=session['user_name'])
 
-# ─── AI ASSISTANT ──────────────────────────────────────
+# ─── AI ASK ROUTE ──────────────────────────────────────
 @app.route('/ai/ask', methods=['POST'])
 def ai_ask():
     if 'user_id' not in session:
@@ -431,60 +440,48 @@ def ai_ask():
     subject = request.form.get('subject', 'General')
     chat_history = request.form.get('history', '[]')
 
-    import json
     try:
         history = json.loads(chat_history)
     except:
         history = []
 
     if not question:
-        return {'error': 'No question provided'}, 400
+        return {'error': 'No question'}, 400
 
     try:
-        client = anthropic.Anthropic(
-            api_key=os.environ.get('ANTHROPIC_API_KEY', '')
-        )
+        genai.configure(api_key=os.environ.get('GEMINI_API_KEY', ''))
 
-        messages = []
-        for msg in history[-10:]:
-            messages.append({
-                "role": msg['role'],
-                "content": msg['content']
-            })
-        messages.append({
-            "role": "user",
-            "content": question
-        })
+        model = genai.GenerativeModel(
+            model_name='gemini-1.5-flash',
+            system_instruction=f"""You are a helpful educational AI assistant for college students and teachers at College From Home portal.
 
-        response = client.messages.create(
-            model="claude-opus-4-5",
-            max_tokens=1024,
-            system=f"""You are a helpful educational AI assistant for college students and teachers at College From Home portal.
-
-Current subject context: {subject}
+Current subject: {subject}
 User role: {session.get('user_role', 'student')}
 User name: {session.get('user_name', 'User')}
 
-Your job is to:
-1. Answer questions clearly and in simple English
-2. ALWAYS break answers into numbered steps when explaining a process
-3. Give examples wherever possible
-4. Use simple language that students can understand easily
-5. If a math or science problem, show full working step by step
-6. End every answer with a short summary
-7. If asked in context of a subject, relate your answer to that subject
-
-Format your answers like:
-- Use numbered steps (1. 2. 3.)
-- Use bullet points for lists
-- Give examples with "Example:" prefix
-- End with "Summary:" section
-
-Be encouraging and supportive to students!""",
-            messages=messages
+Your rules:
+1. Always answer in clear simple English
+2. ALWAYS break answers into numbered steps
+3. Give examples with "Example:" prefix
+4. For math or science problems show full working step by step
+5. End every answer with a short "Summary:" section
+6. Be encouraging and supportive
+7. If code is needed show it clearly
+8. Keep answers focused and easy to understand for college students"""
         )
 
-        answer = response.content[0].text
+        # Build chat history for context
+        gemini_history = []
+        for msg in history[-10:]:
+            gemini_history.append({
+                'role': 'user' if msg['role'] == 'user' else 'model',
+                'parts': [msg['content']]
+            })
+
+        chat = model.start_chat(history=gemini_history)
+        response = chat.send_message(question)
+        answer = response.text
+
         return {
             'answer': answer,
             'status': 'success'
@@ -494,16 +491,7 @@ Be encouraging and supportive to students!""",
         return {
             'error': str(e),
             'status': 'error'
-        }, 500
-        
-        # ─── AI ASSISTANT PAGE ─────────────────────────────────
-@app.route('/ai')
-def ai_assistant():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    if session['user_role'] not in ['student', 'teacher']:
-        return redirect(url_for('login'))
-    return render_template('ai_assistant.html', name=session['user_name'])
+        }, 500'])
         
 # ─── REPORTS DASHBOARD ─────────────────────────────────
 @app.route('/admin/reports')

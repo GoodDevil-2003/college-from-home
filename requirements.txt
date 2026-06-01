@@ -8,4 +8,4 @@ flask-mysqldb
 werkzeug
 gunicorn
 mysqlclient
-anthropic
+google-generativeai
