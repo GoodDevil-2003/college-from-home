@@ -448,11 +448,19 @@ def ai_ask():
     if not question:
         return {'error': 'No question'}, 400
 
+    api_key = os.environ.get('GEMINI_API_KEY', '')
+
+    if not api_key:
+        return {
+            'error': 'API key not configured. Please contact admin.',
+            'status': 'error'
+        }, 500
+
     try:
-        genai.configure(api_key=os.environ.get('GEMINI_API_KEY', ''))
+        genai.configure(api_key=api_key)
 
         model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash',
+            model_name='gemini-2.0-flash',
             system_instruction=f"""You are a helpful educational AI assistant for college students and teachers at College From Home portal.
 
 Current subject: {subject}
@@ -462,15 +470,14 @@ User name: {session.get('user_name', 'User')}
 Your rules:
 1. Always answer in clear simple English
 2. ALWAYS break answers into numbered steps
-3. Give examples with "Example:" prefix
+3. Give examples with Example: prefix
 4. For math or science problems show full working step by step
-5. End every answer with a short "Summary:" section
+5. End every answer with a short Summary: section
 6. Be encouraging and supportive
 7. If code is needed show it clearly
 8. Keep answers focused and easy to understand for college students"""
         )
 
-        # Build chat history for context
         gemini_history = []
         for msg in history[-10:]:
             gemini_history.append({
@@ -491,7 +498,8 @@ Your rules:
         return {
             'error': str(e),
             'status': 'error'
-        }, 500'])
+        }, 500
+        
         
 # ─── REPORTS DASHBOARD ─────────────────────────────────
 @app.route('/admin/reports')
