@@ -460,7 +460,7 @@ def ai_ask():
         genai.configure(api_key=api_key)
 
         model = genai.GenerativeModel(
-            model_name='gemini-2.0-flash',
+            model_name='gemini-1.5-flash',
             system_instruction=f"""You are a helpful educational AI assistant for college students and teachers at College From Home portal.
 
 Current subject: {subject}
