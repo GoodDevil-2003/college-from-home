@@ -3,10 +3,10 @@ from flask_mysqldb import MySQL
 import os
 import csv
 import io
+import json
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import google.generativeai as genai
-import json
 
 app = Flask(__name__)
 app.secret_key = 'collegefromhome_secret_key'
